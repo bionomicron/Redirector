@@ -6,6 +6,7 @@ Last Update: 5/16/2007: Graham Rockwell
 '''
 
 from core.util.Cache import IndexedCache, SecondOrderCache
+from core.util.Report import Report
 
 class Compound:
     '''
@@ -806,7 +807,23 @@ class FluxModel:
                 stringValue += p.toString()
 
         return stringValue
-
-
-
+    
     __repr__ = toString
+
+    def getReport(self):        
+        report = Report()
+        fluxModel = self
+        
+        reactionNames = fluxModel.network.getOrderedReactionNames()
+        reactionMap = fluxModel.network.getReactionMap()
+        
+        for reactionName in reactionNames:
+            reaction = reactionMap[reactionName]
+            equation = reaction.getEquation()
+            pathway = reaction.getAnnotation("Subsystem")
+            name = reaction.getName()#Currently sensitivity values can be too large for control factors.
+            report.addElement(reactionName,"name",name)
+            report.addElement(reactionName,"equation", equation)
+            report.addElement(reactionName,"Subsystem", pathway)
+        
+        return report
