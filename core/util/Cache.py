@@ -251,33 +251,38 @@ class SecondOrderCache:
         """
         return self.columnCache.getindex(value)
     
-    def addValue(self,rowName,columnName,value):
+    def addValue(self,rowKey,columnKey,value):
         """
-        @param  rowName:
-        @type rowName: Object
-        @param columnName:
-        @type columnName: Object
+        @param  rowKey:
+        @type rowKey: Object
+        @param columnKey:
+        @type columnKey: Object
         @type value: Object
         """
-        cRowName = self.rowCache.addValue(rowName)
-        cColumnName = self.columnCache.addValue(columnName)
+        cRowKey = self.rowCache.addValue(rowKey)
+        cColumnKey = self.columnCache.addValue(columnKey)
         
-        if cRowName not in self.rowMap.keys():
-            self.rowMap[cRowName] = []
-        if cColumnName not in self.rowMap[cRowName]:
-            self.rowMap[cRowName].append(cColumnName)
+        if cRowKey not in self.rowMap.keys():
+            self.rowMap[cRowKey] = []
+        if cColumnKey not in self.rowMap[cRowKey]:
+            self.rowMap[cRowKey].append(cColumnKey)
         
-        if cColumnName not in self.columnMap.keys():
-            self.columnMap[cColumnName] = []
-        if cRowName not in self.columnMap[cColumnName]:
-            self.columnMap[cColumnName].append(cRowName)
+        if cColumnKey not in self.columnMap.keys():
+            self.columnMap[cColumnKey] = []
+        if cRowKey not in self.columnMap[cColumnKey]:
+            self.columnMap[cColumnKey].append(cRowKey)
         
-        key = (cRowName,cColumnName)
+        key = (cRowKey,cColumnKey)
         self.data[key] = value
         
         return None
         
-    def removeValue(self, rowName,columnName):
+    def removeValue(self,rowName,columnName):
+        '''
+        @param rowName
+        @type rowName: Object
+        
+        '''
         del self.data[(rowName,columnName)]
         self.rowMap[rowName].remove(columnName)
         self.columnMap[columnName].remove(rowName)
