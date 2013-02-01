@@ -2,12 +2,13 @@
 '''
 @author: Graham Rockwell
 @organization: Church Lab
+Updated 20130131
 Set of functions for manipulating linear optimization models of metabolic networks
 '''
 
 from core.model.LinearModel import LinearModel
 from core.model.LPSolver import LPSolver
-from core.do.FluxModel import FluxLimit
+from core.util.Report import Report
 from numpy import array
 import re,operator
     
@@ -172,6 +173,9 @@ class ViewLinearModel:
         print"done"
 
 class WriteLinearModelToMPS:
+    '''
+    Currently not working
+    '''
     
     def __init__(self):
         self.name = 'ModelMatrix'
@@ -335,9 +339,9 @@ class WriteLinearModelToMPS:
 class LpEvaluation:
     
     def __init__(self):
+        self.verbose = False
         self.originalTag = ""
         self.defaultLimit = (None,None)
-        pass
     
     def setOriginalTag(self,tag):
         self.originalTag = tag
@@ -350,11 +354,10 @@ class LpEvaluation:
         if m:
             coefficient = float( m.group( 1 ) )
             if coefficient == 0:
-                raise "zero coeffecent when parsing element: %s" % (participant)
+                raise "zero coefficient when parsing element: %s" % (participant)
             name = m.group(2)
-            #participant = m.string[m.end( 1 )+1:]
             name = name.strip()
-            #print "%s: %f" %(name, coefficient)
+        
         return (name , float( coefficient ) )
 
 
@@ -368,7 +371,7 @@ class LpEvaluation:
             compartment = '[c]'
 
         participant = participant.strip()
-        #print "%s to %s" % (participant, physEnt)
+        
         return ( participant, compartment)
 
 
@@ -398,10 +401,8 @@ class LpEvaluation:
                     ( left, right ) = equation.split( direction )
                 except Exception:
                     print "failed to parse"
-                return ( left, right, rxn_direction[direction] )
-        raise ParseError, "%s could not be parsed" % equation
-    
-    
+                return ( left, right, direction )
+        raise ParseError, "%s could not be parsed" % equation    
 
     def expression(self,lp,expression,rowName,columnNames,limit):
         result = lp
@@ -416,3 +417,4 @@ class LpEvaluation:
         
         result.addRowLimit(rowName,limit)
         return result
+        
