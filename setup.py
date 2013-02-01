@@ -2,7 +2,7 @@
 '''
 Setup script for Redirector
 @author: Graham Rockwell
-20130201
+20130202
 '''
 import os
 from ez_setup import use_setuptools
