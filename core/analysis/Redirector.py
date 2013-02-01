@@ -1,6 +1,6 @@
 '''
 Created 2010.5.10
-Updated 2013.1.31
+Updated 2013.1.31 
 
 @author: Graham Rockwell
 Church Lab
@@ -15,6 +15,7 @@ User interface command line method for running redirector analysis and framework
 Example usage:
 >python Redirector.py -m SimpleModel1 -b R8 -s R9 --iter 3 --sn 3 -v --sconfig scip_param.set --report  --bt 0.1 
 >python Redirector.py -m iAF1260 -b Biomass -s EX_C14(e) --iter 1 --sn 1 --report --bt 0.1
+
 '''
 
 from core.model.LinearModelSensitivity import LinearModelVariableBoundarys,enzymeBoundaryControl
