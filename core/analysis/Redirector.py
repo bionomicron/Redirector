@@ -15,8 +15,8 @@ User interface command line method for running redirector analysis and framework
 Example usage:
 >python Redirector.py -m SimpleModel1 -b R8 -s R9 --iter 3 --sn 3 -v --sconfig scip_param.set --report  --bt 0.1 
 >python Redirector.py -m iAF1260 -b Biomass -s EX_C14(e) --iter 1 --sn 1 --report --bt 0.1
-
 '''
+
 from core.model.LinearModelSensitivity import LinearModelVariableBoundarys,enzymeBoundaryControl
 from core.model.ModelFactory import ModelFactory
 from core.model.LinearModelTools import ValidateModel
@@ -31,7 +31,6 @@ from optparse import OptionParser
 import os
 import sys
 from core.model.LPSolver import LPSolver
-
 
 
 def main_function():

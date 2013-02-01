@@ -4,6 +4,7 @@ Created on Dec 12, 2012
 @author: Graham Rockwell
 Church Lab
 '''
+
 from core.model.ModelFactory import ModelFactory
 from core.model.LPSolver import LPSolver
 from core.util.Config import ReflectionConfig
@@ -13,10 +14,6 @@ from core.util.ReportWriter import ReportWriter
 from optparse import OptionParser
 from time import strftime
 import os
-
-def test(v):
-    x = v + 2
-    return x
 
 def main_function():
 
