@@ -1,6 +1,6 @@
 '''
 Created on Dec 12, 2012
-
+Updated Feb 05 2013
 @author: Graham Rockwell
 Church Lab
 '''
@@ -8,9 +8,7 @@ Church Lab
 from core.model.ModelFactory import ModelFactory
 from core.model.LPSolver import LPSolver
 from core.util.Config import ReflectionConfig
-from core.util.Report import Report
 from core.util.ReportWriter import ReportWriter
-
 from optparse import OptionParser
 from time import strftime
 import os
@@ -26,58 +24,68 @@ def main_function():
                       help="set verbose mode")
     
     parser.add_option("--config", 
+                      type="string",
+                      metavar="FILE",
                       dest="config", 
                       default="redirector.config",
-                      help="master configuration file", 
-                      metavar="FILE")
+                      help="Master configuration file that provides most setting for the Flux Balanace Analysis. Extra variable settings will be ingnored.  Hence the same config can be used for multiple analysis functions", 
+                      )
                   
-    parser.add_option("-c", "--modelConfig", 
-                      dest="configFileName", 
+    parser.add_option("-c", "--modelConfig",
+                      type="string",
+                      metavar="FILE",
+                      dest="configFileName",
                       default="model_config.txt",
-                      help="configuration file", 
-                      metavar="FILE")
+                      help="Configuration file which sets model files" 
+                      )
     
     parser.add_option("-n","--configNames",
                       type = "string",
+                      metavar = "String",
                       dest = "configNames",
                       default = "Default",
-                      help = "comma separated list of configuration settings to include")    
+                      help = "A comma separated list of the names of configurations to use, as set out in the configuration file")    
     
     parser.add_option("-m","--modelname",
-                      type = "string", 
+                      type = "string",
+                      metavar = "String",
                       dest="modelName", 
                       default="",
-                      help="name of model from configuration file", 
-                      metavar="String")
+                      help="Name of model(s) from the modelconfiguration file" 
+                      )
     
     parser.add_option("-b","--bioObjective", 
                       type = "string",
                       dest="bioObj", 
                       default = 'Biomass',
-                      help="name of biological objective reaction", 
+                      help="Name / ID of biological objective reaction", 
                       metavar="String")
     
     parser.add_option("-o","--outputfile", 
                       dest="outputFileName",
                       default = None,
-                      help="name of report FILE", 
+                      help="Name of report file to be generated", 
                       metavar="FILE")
     
     parser.add_option("-r", "--result_directory",
-                       dest="resultDirectory", 
-                       default='../../results/',
-                       help = "directory where results are stored")
+                      type="string",
+                      metavar="directory",
+                      dest="resultDirectory", 
+                      default='../../results/',
+                      help = "Directory where results are stored")
         
     parser.add_option("--targets",
+                      type="string",
+                      metavar="String",
                       dest = "targets",
                       default = '',
-                      help = "Valid reaction targets")
+                      help = "List of valid reaction target, if left blank will be automatically filled in from metabolic network file")
 
     parser.add_option("--report",
                       action = "store_true",
                       dest = "isReport",
                       default = False,
-                      help = "Write report",
+                      help = "When this tag is used a report will be generated when the analysis is finished",
                       metavar = "boolean")
     
     
@@ -94,6 +102,8 @@ def main_function():
                       help = "Use Gene Map")
     
     parser.add_option("--section",
+                      type="string",
+                      metavar="String",
                       dest="subSections",
                       default = '',
                       help = "Comma separated list of sections of the model files to use")
@@ -154,7 +164,7 @@ def main_function():
     
     naturalObjective = {objectiveName:-1.0}
     
-    if verbose: print "Flux Balanace Analysis Version 1.5"
+    if verbose: print "Flux Balanace Analysis Version 1.6"
     if verbose: print "Model names: [%s]" % (modelName)
     if verbose: print "Parsing data files for [%s]" % (modelName)
     
@@ -181,7 +191,7 @@ def main_function():
     if verbose: print "Optimized Objective [%s] Value [%s]" % (objectiveName,objectiveValue)
 
     report = fluxModel.getReport()
-    report.addColumnHash("flux", predictions)
+    report.addColumnHash("Flux", predictions)
     
     if outputFileName == None or outputFileName == '':
         outputFileName = resultsDirectory + "FBA_%s_%s.txt" % (modelName,strftime('%Y%m%dT%H%M%S'))
@@ -192,7 +202,6 @@ def main_function():
     writer.closeFile()
     
     if verbose: print "Report Written [%s]" % (outputFileName)
-    
     
     
 if __name__  == "__main__":
