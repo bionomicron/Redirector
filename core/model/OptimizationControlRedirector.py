@@ -530,6 +530,7 @@ class OptimizationControlRedirector:
            Find maximum Natural Objective
            Find minimum threshold for to use for Natural objective
         '''
+       
         # Set variables !working point
         self.rGeneMap = model.controlMap
         self.modelName = model.modelName
