@@ -2,7 +2,7 @@
 '''
 @author: Graham Rockwell
 @organization: Church Lab Harvard Genetics
-@version: 10/18/2006
+@version: 02/18/2013
 '''
 
 import string, sets
