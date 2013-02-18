@@ -128,7 +128,7 @@ class ModelFactory:
             result[key].extend(a2[key])
         return result
                     
-    def parseModel(self,modelNames,finalName="core"):
+    def parseModel(self,modelNames):
         '''
         Generate linear optimization model object
         using names from configuration set in ModelFactory
@@ -489,21 +489,21 @@ class ModelFactory:
         geneCluster = {}
         
         if self.preLoad and os.path.exists(reducedFileName) and False:
-            (reducer,modelMatrix,rGeneMap) = self.load(reducedFileName)
+            (reducer,modelMatrix,controlMap) = self.load(reducedFileName)
         elif self.useReduced:
             if self.verbose: "---Print performing model reductions--"
             originalModel = LinearModel()
             originalModel.extend(modelMatrix)
-            (reducer,modelMatrix,rGeneMap,geneCluster) = self.reduce(modelMatrix,geneMap,rGeneMap,reducedFileName)
+            (reducer,modelMatrix,controlMap,geneCluster) = self.reduce(modelMatrix,geneMap,rGeneMap,reducedFileName)
             #!self.checkReduction(originalModel, modelMatrix) #! this method needs work to produce more informative and readable results
             
         #---------------------------------
         # finish populating geneCluster
         #---------------------------------
-        if rGeneMap != None:
-            (geneCluster) = self.geneCluster(rGeneMap, geneCluster)
+        if controlMap != None:
+            (geneCluster) = self.geneCluster(controlMap, geneCluster)
             
-        modelMatrix.controlMap = rGeneMap
+        modelMatrix.controlMap = controlMap
         targets = self.sliceTargets(modelMatrix)
         modelMatrix.targets = targets
         

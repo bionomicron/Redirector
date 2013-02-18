@@ -180,12 +180,12 @@ class LinearModel(SecondOrderCache):
         self.verbose = False
         
         #Data Containers
+        self.modelName = ''
         self.data = SecondOrderCache()
         self.rowLimits = {}
         self.columnLimits = {}
         self.mipColumns = IndexedCache()
         self.objective = {}
-        self.modelName = ''
         
         #Report of model annotation values (dict)
         self.annotation = None
@@ -193,6 +193,7 @@ class LinearModel(SecondOrderCache):
         #Control
         self.targets = None
         self.controlMap = None
+        self.controlClusters = None
         self.naturalObjective = None
         self.syntheticObjective = None
         

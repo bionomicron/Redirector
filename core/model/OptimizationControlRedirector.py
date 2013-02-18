@@ -1,5 +1,5 @@
 '''
-Updated May 29, 2012
+Updated February 07, 2013
 @author: Graham Rockwell
 Constructor for Redirector Bilevel Optimization Model
 '''
@@ -38,7 +38,7 @@ class OptimizationControlRedirector:
         #float
         self.naturalScale = 0.2
         self.aneal = 0.0
-        self.delta = 0.001
+        self.delta = 0.1
         
         #strings
         self.control = ''
@@ -56,7 +56,7 @@ class OptimizationControlRedirector:
         #objects / factories
         self.solver = 'GLPK'
         self.modelFactory = None
-        self.con = None
+        self.con = ConstructRegulationOptimization()
         self.controlFactory = None 
         self.debugTools = OptimiztionDebugingTools()
         self.solverConfig = ''
@@ -266,6 +266,9 @@ class OptimizationControlRedirector:
         return(controlValues,controlScore,reactionControl)
     
     def sliceValueControl(self,value,controlMap):
+        '''
+        to be refactored
+        '''
         result = []
         controlPile = []
         cvalue = value
@@ -454,6 +457,11 @@ class OptimizationControlRedirector:
             self.con.setGeneMap(model.controlMap)
             
     def _runOptimization(self,originalModel,model,tmodel,controlNames,runTag,geneClusters=None):
+        '''
+        Perform optimization Redirector formulation of MILP
+        Find targeted genes or reactions
+        Print reactions and or genes which are found
+        '''
         
         (lt,sCode) = self.runOptimization(tmodel,runTag)
         
@@ -484,9 +492,7 @@ class OptimizationControlRedirector:
             
     def _getProgressiveParameter(self,oPredVal,sPredVal,iPredVal,iObjective):
         '''
-        #--------------------------------------------------------
-        # Calculate natural parameter
-        #--------------------------------------------------------
+        Calculate progressive growth parameter from current flux state
         '''
         
         zObjective = dict(iObjective)
@@ -513,17 +519,23 @@ class OptimizationControlRedirector:
         return (rValue,sEffectValue,bioAdjust)
         
     
-    def optimizeControl(self,model,geneClusters = None,minNatural=0.2):
+    def optimizeControl(self,model,minNatural=0.2):
         '''
-        Main function for running 
-        Growth Drive Progressive Target Discovery
+        Main Function 
+        Run: Growth Drive Progressive Target Discovery
         '''
         
-        #-----------------------------------------------------------
-        # I. Information for optimal natural and synthetic networks 
-        # Find Values for Max Natural Objective
-        # Find minimum natural flux threshold
-        #-----------------------------------------------------------
+        '''
+        1. Derive optimal natural and synthetic networks 
+           Find maximum Natural Objective
+           Find minimum threshold for to use for Natural objective
+        '''
+        # Set variables !working point
+        self.rGeneMap = model.controlMap
+        self.modelName = model.modelName
+        self.targets = model.targets
+        geneClusters = model.controlClusters
+        
         if self.verbose: print "Finding natural and synthetic parameters of metabolic network."
         
         naturalObjective = {self.naturalObjectiveName:-1.0}
@@ -535,14 +547,14 @@ class OptimizationControlRedirector:
         oSynthVal = oPredVal[self.syntheticObjectiveName]
             
         minNaturalVal = oBioVal * minNatural
-        #model.addColumnLimit(self.naturalObjectiveName,(minNaturalVal,None))
+       
         model.addColumnLimit(self.naturalObjectiveName,(minNaturalVal,None))
         if self.verbose: print "Max Natural: Natural [%s] Synthetic: [%s] => min Natural [%s]" % (oBioVal, oSynthVal, minNaturalVal)
-        natObjLimit = model.getColumnLimit(self.naturalObjectiveName)
+        #natObjLimit = model.getColumnLimit(self.naturalObjectiveName)
         
-        #---------------------------------------
-        # Values for Max Synthetic Objective
-        #---------------------------------------
+        '''
+        2. Find maximum value of Synthetic objective
+        '''
         
         lo = self._solverFactory()
         sPredVal = lo.run(model=model,objective = syntheticObjective)
@@ -597,7 +609,6 @@ class OptimizationControlRedirector:
         ltPredV = self.previousState
         checkPredV = {}
     
-        
         #----------------------------------------------
         # Check constructor for proper gene ordering
         #----------------------------------------------
@@ -621,9 +632,12 @@ class OptimizationControlRedirector:
         if naturalCoefficient != 0:
             pNaturalCoefficient = naturalCoefficient    
         
-        #==========================================
-        # Primary Search Loop     
-        #==========================================
+        
+        '''
+        ==========================================================
+        Begin Primary Search Loop: Progressive Target Discovery
+        ==========================================================
+        '''
          
         if self.verbose: print "\n==Starting Iterative Search Size[%s] Iterations [%s->%s]==" %(searchNeighborhood,preStart,preStart+self.iterations)
         if self.verbose: print "Number of Targets [%s]" % len(targets)
@@ -638,7 +652,7 @@ class OptimizationControlRedirector:
                 self.con.objectiveCoeffecent = naturalCoefficient
                 
                 #--------------------------------------
-                # Set controls for optimization
+                # Set targets for optimization
                 #--------------------------------------
                 
                 controlNames = self.getControlNames(targets)
@@ -669,6 +683,10 @@ class OptimizationControlRedirector:
                 else:
                     if self.verbose: print "\n=====================Optimal solution found====================="
         
+                #---------------------------------
+                # Print Current state of result
+                #---------------------------------
+                
                 ltPredV = lt.getMipPredictionMap()
                 ltObjVal = lt.getMipObjectiveValue()
                 ltBioVal = ltPredV[self.naturalObjectiveName]
@@ -814,10 +832,12 @@ class OptimizationControlRedirector:
                 pBioV = ltBioVal
                 pSynthV = ltSynthVal
                 pEffectValue = effectValue
-                    
-        #===========================
-        # End Loop
-        #===========================
+
+        ''''                 
+        ================================================
+         End Search Loop: Progressive Target Discovery
+        ================================================
+        '''
         
         if self.verbose: print "\n=======Search Concluded========="
     

@@ -36,22 +36,7 @@ class LPSolver:
         self.mpsLogFile = False
         self.ignoreBadReferences = False
         self.Mip = True
-        
-        self.statusMap = {
-                  180:'OPTIMAL',
-                  181:'FEASIBLE',
-                  182:'INFEASIBLE',
-                  183:'NOFEASBILE',
-                  184:'UNBOUND',
-                  185:'UNDEFINED',
-                  140:'BASIC',
-                  141:'NON-BASIC_LOWER',
-                  142:'NON-BASIC_UPPER',
-                  143:'NON-BASIC_FREE',
-                  144:'NON-BASIC_FIXED'
-        }
-        pass
-    
+            
     def _parseSCIPLog(self, fileName):
         '''
         Parse result of SCIP analysis.
@@ -119,7 +104,7 @@ class LPSolver:
         @type fileName: String
         """
         self.lpProblem.writeMPS(fileName)
-        return None
+        return True
         
     def writeLP(self,fileName):
         """
@@ -127,19 +112,33 @@ class LPSolver:
         @type fileName: String
         """
         self.lpProblem.writeLP(fileName,writeSOS=0)
-        return None
+        return True
             
     def clear(self):
+        '''
+        Left over place holder function
+        To be removed
+        '''
         return None
     
     def setConfigFile(self, configFile):
+        '''
+        @param configFile: name of configuration file handed to solver (mostly for SCIP)
+        @type configFile: String
+        '''
         self.configFile = configFile
         
     def setObjectiveByName(self,name,value):
         '''
-        this should be changed to be more general
+        @param name: name of variable to be optimized
+        @param value: coefficient of objective 
+        
+        Useful for setting a optimization of a single variable as the objective function 
         '''
         self.lpObjective = {name:value}
+        
+    def setObjectiveFunction(self,objectiveMap):
+        self.lpObjective = objectiveMap
         
     def clearObjective(self):
         self.lpObjective = {}
@@ -240,6 +239,11 @@ class LPSolver:
         self.predictionMap = result
         
     def solve(self,solver=pulp.GLPK(msg=0)):
+        status = self.lpProblem.solve(solver)
+        self._setPredictionMap()    
+        return status
+    
+    def runGLPK(self,solver=pulp.GLPK(msg=0)):
         status = self.lpProblem.solve(solver)
         self._setPredictionMap()    
         return status
