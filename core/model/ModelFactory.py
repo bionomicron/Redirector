@@ -1,5 +1,6 @@
 '''
 Created on Dec 17, 2010
+Updated on Feb 18, 2013
 @author: Graham Rockwell
 Factory for generating 
  Linear optimization models
