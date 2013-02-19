@@ -517,7 +517,117 @@ class OptimizationControlRedirector:
         if self.verbose: print "Adjusted control value [%s] = [%s] / ([%s] - [%s])" % (bioAdjust,rValue,oNatVal,sNatVal)
                                  
         return (rValue,sEffectValue,bioAdjust)
+    
+    def findCurrentObjective(self,prediction,model,originalModel,controlNames,geneClusters):
+        ltPredV = prediction
+        ltBioVal = ltPredV[self.naturalObjectiveName]
+        ltSynthVal = ltPredV[self.syntheticObjectiveName]
+        resultPass = True
+
+        if self.verbose: print "\n======================Optimization Result======================"
+        (iObjective,iLibObjective) = self.con.generateObjective(originalModel, controlNames, ltPredV)
+        if self.verbose: print "Current objective[%s]: %s" % (str(len(iObjective)),iObjective)
+        if self.verbose: print "--> library source objective[%s]: %s" % (str(len(iLibObjective)),iLibObjective)
+        (iGeneObjective,iOtherObjective) = (None,None)
+        if self.useGeneMap:
+            (iGeneObjective,iOtherObjective) = self.printGeneObjective(iObjective,geneClusters)
+            aGeneObjective = self._annotateObjective(iObjective, model, "bnumber", regex="[a-zA-Z0-9\(\)]+")    
+            if self.verbose: print "Current Genetic objective[%s]: %s" % (str(len(aGeneObjective)),aGeneObjective)
+            if self.verbose: print "Current Other objective: %s" % (iOtherObjective)
+            
+        #--------------------------------------
+        #Check prediction
+        #--------------------------------------
+        if(True):
+            lpCheck = self._solverFactory()
+            checkPredV = lpCheck.run(model=originalModel,objective = iObjective)
+            checkNaturalValue = checkPredV[self.naturalObjectiveName]
+            checkSynthVal = checkPredV[self.syntheticObjectiveName]
+            lpCheck.clear()
+            if self.verbose: print "---Optimization Result check ---"
+            if self.verbose: print "Natural [%s] ?= Check [%s] " % (ltBioVal, checkNaturalValue)
+            if self.verbose: print "Production [%s] ?= Check [%s]" % (ltSynthVal, checkSynthVal)
+            
+        return (iObjective,iGeneObjective,ltSynthVal,checkPredV,checkSynthVal) 
         
+    def progressiveSearchParameter(self,pred,pPred,naturalOpt,synthOpt,iObjective,naturalCoefficient,pNaturalCoefficient,pEffectValue,maxNatural,maxEffect):
+        
+        #--------------------------------------------------------
+        # Calculate updated natural parameter 
+        #--------------------------------------------------------
+                
+        if self.verbose: print "\n======================Progress Control======================"
+        (effectValue,sEffectValue,bioAdjust) = self._getProgressiveParameter(naturalOpt, synthOpt, pred, iObjective)
+    
+        ltSynthVal = pred[self.syntheticObjectiveName]
+        ltBioVal = pred[self.naturalObjectiveName]
+        pBioV = pPred[self.naturalObjectiveName]
+        pSynthV = pPred[self.syntheticObjectiveName]
+        delta = self.delta
+        
+        oBioVal = naturalOpt[self.naturalObjectiveName]
+        bioValLower = oBioVal * 0.5 
+        synthValLower = synthOpt[self.syntheticObjectiveName] *0.1
+        
+        #-----------------------------------------
+        #Search Loop Conditions
+        #-----------------------------------------
+        
+        if self.verbose: print "===Progressive Growth Search Conditions==="
+        if self.verbose: print "Effect %s vs. Current max effect %s" % (effectValue, maxEffect)
+        if self.verbose: print "Redirector function control value %s" % (bioAdjust)
+        if self.verbose: print "Natural objective value %s vs. Min natural value %s " % (ltBioVal, bioValLower)
+        if self.verbose: print "Production value %s vs. Min production %s " % (ltSynthVal, synthValLower)
+                
+        #-------------------------------------------------------------------
+        # Find new progressive control value
+        #-------------------------------------------------------------------                
+                                
+        print "\n=============Finding new progressive control value=============="
+        lowSynth = abs(ltSynthVal) < abs(synthValLower)
+        lowBio = abs(ltBioVal) < abs(bioValLower)
+        staticEffect = abs(effectValue - pEffectValue) < pEffectValue * 2 * delta
+        staticNatural = abs(naturalCoefficient - pNaturalCoefficient) < pNaturalCoefficient * 2 * delta
+                
+        if  staticEffect or lowSynth or lowBio:
+            print "-----Finding new progressive control value----"
+            print "Adjustment: previous [%s] -> current [%s]" %(pEffectValue, effectValue)
+            print "Previous Bio[%s] ->  CurrentBio[%s]  vs.  MinBio[%s] " %(pBioV, ltBioVal,bioValLower)
+            print "Previous Synth[%s] -> CurrentSynth[%s]  vs.  MinSynth[%s]" %(pSynthV, ltSynthVal,synthValLower)
+            print "Natural control value [%s]" % (naturalCoefficient) 
+                    
+            if staticEffect:
+                print "-----Unchanged Control Contribution-----"
+                print "Natural Parameter Change [%s]" % abs(naturalCoefficient - pNaturalCoefficient)
+                print "Redirection Function Change [%s]" % abs(effectValue - pEffectValue)  
+                        
+            if lowBio:
+                print "-----Accounting for low natural objective flux-----"               
+                pNaturalCoefficient = naturalCoefficient
+                naturalCoefficient = bioAdjust * (1.0 + delta)
+                if naturalCoefficient > pNaturalCoefficient *1.20: 
+                    print "New Natural Control [%s] =  %s / ( %s - %s ):" % (bioAdjust, effectValue, oBioVal, ltBioVal)
+                else:
+                    naturalCoefficient = pNaturalCoefficient * 1.20
+                    print "New Natural Control [%s] = 1.2 * Old Control [%s]" % (naturalCoefficient,pNaturalCoefficient)
+                    
+            elif lowSynth:
+                print "-----Low Production Decreasing natural coefficient-----"
+                print "Current Synthetic [%s] < Min Synthetic [%s]" % (abs(ltSynthVal),abs(synthValLower))
+                print "Reducing natural control strength"
+                        
+                if not staticNatural:
+                    pNaturalCoefficient = naturalCoefficient
+                    naturalCoefficient = pNaturalCoefficient - ( pNaturalCoefficient * delta )
+                    print "Small natural coefficient reduction"
+                    print "New Natural %s = %s - (%s * %s)" %(naturalCoefficient,pNaturalCoefficient,pNaturalCoefficient,delta)
+                else: 
+                    pNaturalCoefficient = naturalCoefficient
+                    naturalCoefficient = maxNatural + (pNaturalCoefficient - maxNatural)/2
+                    print "Mid point natural coefficient reduction"
+                    print "New Natural %s = %s + (%s - %s) / 2" %(naturalCoefficient,maxNatural,pNaturalCoefficient,maxNatural)
+                                    
+            return (effectValue, naturalCoefficient)
     
     def optimizeControl(self,model,minNatural=0.2):
         '''
@@ -676,53 +786,31 @@ class OptimizationControlRedirector:
                 
                 runTag = "%s_%s_%s_k%s_i%s" % (self.control,self.naturalObjectiveName,self.syntheticObjectiveName,searchNeighborhood,i)
                 (lt,sCode) = self.runOptimization(tmodel,runTag)
-                if self.verbose: print "Optimization Completed [%s]" % (sCode)
+                iRunTime = time() - iTime
+                if self.verbose: print "Optimization Completed: Code [%s] Time [%s]" % (sCode,iRunTime)
                 
                 if sCode == None:
                     if self.verbose: print "Failure to find optimal solution: breaking search loop"
                     break
                 else:
-                    if self.verbose: print "\n=====================Optimal solution found====================="
-        
-                #---------------------------------
-                # Print Current state of result
-                #---------------------------------
+                    if self.verbose: print "--> Optimal solution found"
                 
                 ltPredV = lt.getMipPredictionMap()
-                ltObjVal = lt.getMipObjectiveValue()
-                ltBioVal = ltPredV[self.naturalObjectiveName]
-                ltSynthVal = ltPredV[self.syntheticObjectiveName]
+                
                 lt.clear()
+        
+                #----------------------------------------------------------
+                # Process and print current state of optimization search
+                #----------------------------------------------------------
                 
-                (iObjective,iLibObjective) = self.con.generateObjective(originalModel, controlNames, ltPredV)
-                if self.verbose: print "Current objective[%s]: %s" % (str(len(iObjective)),iObjective)
-                if self.verbose: print "Current library source objective[%s]: %s" % (str(len(iLibObjective)),iLibObjective)
-                (iGeneObjective,iOtherObjective) = (None,None)
-                if self.useGeneMap:
-                    (iGeneObjective,iOtherObjective) = self.printGeneObjective(iObjective,geneClusters)
-                    aGeneObjective = self._annotateObjective(iObjective, model, "bnumber", regex="[a-zA-Z0-9\(\)]+")    
-                    if self.verbose: print "\nCurrent Genetic objective[%s]: %s" % (str(len(aGeneObjective)),aGeneObjective)
-                    if self.verbose: print "Current Other objective: %s" % (iOtherObjective)
-                    
-                iRunTime = time() - iTime
-                
-                #--------------------------------------
-                #Check prediction
-                #--------------------------------------
-                
-                lpCheck = self._solverFactory()
-                checkPredV = lpCheck.run(model=newModel,objective = iObjective)
-                checkNaturalValue = checkPredV[self.naturalObjectiveName]
-                checkSynthVal = checkPredV[self.syntheticObjectiveName]
-                lpCheck.clear()
+                (iObjective,iGeneObjective,ltSynthVal,checkPredVal,checkSynthVal) = self.findCurrentObjective(ltPredV,model,originalModel,controlNames,geneClusters)                
+                if abs(ltSynthVal- checkSynthVal) > max(abs(ltSynthVal *0.25),1.0):
+                    print "Large model prediction inaccuracy"
+                    print "==========breaking search loop!=========="
+                    continue
 
-                if self.verbose: print "\n======================Optimization Result======================"
-                if self.verbose: print "Iteration Time: %f" % (iRunTime)    
-                if self.verbose: print "Natural [%s] ?= Check [%s] " % (ltBioVal, checkNaturalValue)
-                if self.verbose: print "Production [%s] ?= Check [%s]" % (ltSynthVal, checkSynthVal)
-                
                 #--------------------------------------------------------
-                # Calculate control strengths: Start new version here
+                # Calculate updated natural parameter 
                 #--------------------------------------------------------
                 
                 if self.verbose: print "\n======================Progress Control======================"
@@ -737,7 +825,9 @@ class OptimizationControlRedirector:
                 #-----------------------------------------
                 #Search Loop Conditions
                 #-----------------------------------------
-                
+                ltBioVal = ltPredV[self.naturalObjectiveName]
+                ltSynthVal = ltPredV[self.syntheticObjectiveName]
+        
                 if self.verbose: print "===Progressive Growth Search Conditions==="
                 if self.verbose: print "Effect %s vs. Current max effect %s" % (effectValue, maxEffect)
                 if self.verbose: print "Redirector function control value %s" % (bioAdjust)
@@ -749,11 +839,6 @@ class OptimizationControlRedirector:
                 # Check Search Loop Conditions
                 #--------------------------------------
                 
-                if abs(ltSynthVal- checkSynthVal) > max(abs(ltSynthVal *0.25),1.0):
-                    print "Large model prediction inaccuracy"
-                    print "==========breaking search loop!=========="
-                    continue
-
                 if abs(ltSynthVal) > abs(synthValLower) and (effectValue > maxEffect):
                     if self.verbose: print "-------------New maximum control found------------"
                     if self.verbose: print "Current Natural %s > Previous Max Natural %s" % (naturalCoefficient,maxNatural)
@@ -843,33 +928,12 @@ class OptimizationControlRedirector:
         if self.verbose: print "\n=======Search Concluded========="
     
         if finalPredictionValue == None:
-            fObjective = iObjective
             finalPredictionValue = ltPredV
-            finalCheckValue = checkPredV
         
-        naturalValue = finalPredictionValue[self.naturalObjectiveName]
-        synthVal = finalPredictionValue[self.syntheticObjectiveName]
-        checkNaturalValue = finalCheckValue[self.naturalObjectiveName]
-        checkSynthVal = finalCheckValue[self.syntheticObjectiveName]
-                        
-        if self.verbose: print "Saving current search position to disk"
-        self.writePreStart(fObjective, finalPredictionValue, i)
+        (fObjective,iGeneObjective,ltSynthVal,finalPreditionValue,checkSynthVal) = self.findCurrentObjective(finalPredictionValue,model,originalModel,controlNames,geneClusters)
         
-        if self.verbose: print "Final objective: %s" % (fObjective)
-        
-        if self.useGeneMap:
-            (fGeneObjective,fOtherObjective) = self.printGeneObjective(fObjective,geneClusters)
-            fGeneObjective = self._annotateObjective(fObjective, model, annotationName="bnumber",regex="[a-zA-Z0-9\(\)]+")
-            if self.verbose: print "Final Genetic objective: %s" % (fGeneObjective)
-            if self.verbose: print "Final Other objective: %s" % (fOtherObjective)
-            
-        if self.verbose: print "Iteration Time: %f" % (iRunTime)    
-        if self.verbose: print "Final Natural Control Strength [%s] vs. Control Strength [%s]" % ((oBioVal-sBioVal)*maxNatural,maxEffect )
-        if self.verbose: print "Final Natural [%s] ?= Check [%s]" % (naturalValue,checkNaturalValue)
-        if self.verbose: print "Final Production [%s] ?= Check [%s]" % (synthVal,checkSynthVal)
-                        
         ltReport = self.con.createReport(finalPredictionValue,originalFluxNames,targets,geneClusters)
-        ltReport["confirm"] = finalCheckValue
+        #ltReport["confirm"] = finalCheckValue
         
         return (ltReport,oPredVal,sPredVal,finalCheckValue,fObjective)
     

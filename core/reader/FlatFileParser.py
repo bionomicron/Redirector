@@ -875,9 +875,9 @@ class  FluxModelFlatFileParser( FlatFileParser ):
         for objectivefile in objectivefiles:
             for limitfile in fluxlimitfiles:
                 name = objectivefile + "-" + limitfile
-                analyisNames.append( name )
-                newFluxLimitFileList[analysisName] = fluxlimitfile
-                newObjectiveFileLIst[analysisName] = objectivefile
+                analysisNames.append( name )
+                newFluxLimitFileList[name] = limitfile
+                newObjectiveFileList[name] = objectivefile
 
         fluxModel = self.parseMultipleAnalyis( self, rxnfile, metabolitefile, newFluxLimitFileList, newObjectiveFileList )
         return fluxModel
