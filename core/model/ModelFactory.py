@@ -470,10 +470,11 @@ class ModelFactory:
         if self.verbose: print "Targets %s" % (len(modelMatrix.targets))
             
         #--------------------
-        #Get Gene Mappings5
+        #Get Gene Mappings
         #--------------------
         geneMap = None
         rGeneMap = None
+        controlMap = None
         if self.useGeneMap:
             controlMap = fluxModel.getMetabolicNetwork().getAnnotation("GeneAssociation")
             (geneMap,rGeneMap) = self.parseControlMap(controlMap,modelMatrix.targets,controlFilter = lambda x : len(x) <= self.maxControlTagLen)
@@ -482,6 +483,7 @@ class ModelFactory:
             rGeneMap = {}
             for target in modelMatrix.targets:
                 rGeneMap[target] = target
+        
         #----------------------------
         # Reduce Model #! remove reduction functions: complex and don't seem to give much improvement.
         #---------------------------- 
@@ -504,7 +506,7 @@ class ModelFactory:
         if controlMap != None:
             (geneCluster) = self.geneCluster(controlMap, geneCluster)
             
-        modelMatrix.controlMap = controlMap
+        modelMatrix.controlMap = rGeneMap #important to use this after filtering and fixing gene set.
         targets = self.sliceTargets(modelMatrix)
         modelMatrix.targets = targets
         

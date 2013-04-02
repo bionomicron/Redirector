@@ -149,6 +149,7 @@ class LPSolver:
         mipColumns = model.getMipColumnNames()
         
         result = {}
+        varNames = []
         
         for name in columnNames:
             (lower,upper) = (None,None)
@@ -299,7 +300,7 @@ class LPSolver:
             resultCode = self.solve()
         return resultCode
         
-    def run(self, model = None, objective = None,logFile=None):
+    def run(self, model = None, objective = None, logFile=None):
         '''
         choose and run appropriate optimization
         '''

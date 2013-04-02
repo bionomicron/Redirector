@@ -97,6 +97,8 @@ class OptimizationControlRedirector:
         
         return tmodel
 
+    import pickle
+
     def runOptimization(self,model,tag=''):
         '''
         Method to select and run solver
@@ -106,7 +108,7 @@ class OptimizationControlRedirector:
         solver = self._solverFactory()
                         
         if self.verbose: print "Preparing optimization"
-        solver.setModel(model)
+        (problem,var) = solver.setModel(model)
         
         if self.debug:
             solver.writeMPS(self.analysisDirectory + "/RD_log_%s.mps" % tag)
