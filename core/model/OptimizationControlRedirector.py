@@ -7,7 +7,7 @@ Constructor for Redirector Bilevel Optimization Model
 from core.model.LinearModel import LinearModel
 from core.model.LPSolver import LPSolver
 from core.model.ProcessModel import MatrixTools
-from core.model.OptimizationAnalysisTools import OptimiztionDebugingTools
+from core.model.OptimizationAnalysisTools import OptimizationDebugingTools
 from core.model.ConstructRegulationOptimization import ConstructRegulationOptimization
 from core.util.Report import Report
 from core.util.ReportWriter import ReportWriter
