@@ -58,7 +58,7 @@ class OptimizationControlRedirector:
         self.modelFactory = None
         self.con = ConstructRegulationOptimization()
         self.controlFactory = None 
-        self.debugTools = OptimiztionDebugingTools()
+        self.debugTools = OptimizationDebugingTools()
         self.solverConfig = ''
         
         #File IO variables:
