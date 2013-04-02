@@ -93,20 +93,27 @@ class Report:
         @type report: Report
         """
         self.data.extend(report.data)
-            
-    def returnRowNames(self):
+        
+    def getRowNames(self):
         """
         @return: the names of all the rows in the report
         @rtype: string[]
         """
         return self.data.getRowKeys()
         
-    def returnColumnNames(self):
+            
+    def returnRowNames(self):
+        return self.getRowNames()
+        
+    def getColumnNames(self):
         """
         @return: the names of all the columns in the report
         @rtype: string[]
         """
         return self.data.getColumnKeys()
+        
+    def returnColumnNames(self):
+        return self.getColumnNames()
         
     def returnRowArray(self,rowName):
         """

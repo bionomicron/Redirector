@@ -116,7 +116,7 @@ class ModelFactory:
         parser = FlatFileParser()
         result = {}
         for (name,keyTag,fileName) in annotationFiles:
-            annotation = parser.parseGenericReport(fileName, keyTag, unique = True)
+            annotation = parser.parseGenericReport(fileName, keyTag, unique=True)
             result[name] = annotation
         return result
     

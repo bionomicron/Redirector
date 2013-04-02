@@ -2,7 +2,7 @@
 '''
 @author: Graham Rockwell
 @organization: Church Lab Harvard Genetics
-@version: 02/18/2013
+@version: 03/04/2013
 '''
 
 import string, sets, re
@@ -44,12 +44,6 @@ class FlatFileParser:
         self.fileHandle = None
         self.index = None
         
-    def throwCheckError( self ):
-        self.failLine = True
-
-    def passCheckError( self ):
-        self.failLine = False
-        
     def setEmptyLine( self, emptyLine ):
         self.emptyLine = emptyLine
         
@@ -82,18 +76,12 @@ class FlatFileParser:
         self.requiredHeaderMap = {}
         self.optionalHeaderMap = {}
         self.headerIndex = {}
-
-    def addRequiredHeader( self, dataName, header ):
-        self.requiredHeaderMap[header] = dataName
-
-    def addOptionalHeader( self, dataName, header ):
-        self.optionalHeaderMap[header] = dataName
-
-    def addRequiredHeaders( self, headerMap ):
-        self.requiredHeaderMap.update( headerMap )
         
-    def addOptionalHeaders( self, headerMap ):
-        self.optionalHeaderMap.update( headerMap )
+    def addRequiredHeaders(self, headerMap):
+        self.requiredHeaderMap.update(headerMap)
+        
+    def addOptionalHeaders(self, headerMap):
+        self.optionalHeaderMap.update(headerMap)
 
     def setRequiredHeaderMap( self, headerMap ):
         self.resetHeaders()
@@ -101,8 +89,10 @@ class FlatFileParser:
 
     def setHeader( self, headers ):
         self.resetHeaders()
+        headerMap = {}
         for h in headers:
-            self.addRequiredHeader( h, h )
+            headerMap[h] = h
+        self.addRequiredHeaders(headerMap)
 
     def checkRequiredHeaders( self, line ):
         '''
@@ -135,8 +125,29 @@ class FlatFileParser:
             return self.emptyData
         else:
             return v
+        
+    def parseLineToHeader(self, line, headerMap, required = False):
+        '''
+        Parses map of list of data matching to required headers
+        '''
+        result = {}
+        for header in headerMap.keys():
+            dataName = headerMap[header]
+            if self.headerIndex.has_key( header ):
+                index  = self.headerIndex[header]
+                value = line[index]
+                result[dataName] = self.checkFieldValue( value )
+            elif required:
+                raise ParseError("Failed to find required header [%s]" % header)
+            else:
+                result[dataName] = self.emptyData
+        return result
 
     def parseRequired( self, line ):
+        '''
+        #! to be removed
+        Parses map of list of data matching to required headers
+        '''
         result = {}
         for header in self.requiredHeaderMap.keys():
             dataName = self.requiredHeaderMap[header]
@@ -145,6 +156,10 @@ class FlatFileParser:
         return result
 
     def parseOptional( self, line ):
+        '''
+        #! to be removed
+        Parses map of list of data matching to required headers
+        '''
         result = {}
         for header in self.optionalHeaderMap.keys():
             dataName = self.optionalHeaderMap[header]
@@ -171,20 +186,6 @@ class FlatFileParser:
                 result[headerName] = self.checkFieldValue(value)
         return result
 
-    def safeSplit( self, line ):
-        '''
-        Splits the line into a list
-        checks for a wrapper on the elements of the list and removes them
-        @return: [String]
-        '''
-        line.replace( "\n", '' )
-        nline = []
-        for v in line.split(self.delimiter):
-            v = string.replace(v,self.wrapperString,'')
-            v = string.strip(v)
-            nline.append(v)
-        return nline
-    
     def checkHeader( self, headerLine ):
 
         hLine = self.safeSplit( headerLine )
@@ -199,41 +200,34 @@ class FlatFileParser:
             self.indexHeader( hLine )        
         
         return True
-
     
-    def parseLine( self, line ):
-        '''
+    def parseGenericHeader(self, headerLine, unique = True):
+        hLine = self.safeSplit( headerLine )
+        hLineSet = sets.Set( hLine )
+
+        if len( hLineSet ) != len( hLine ) and unique:
+            raise ParseError( "Duplicate column name %s" % ( hLine ) )
+
+        if self.setHeader(hLine ):
+            self.indexHeader( hLine )        
         
+        return hLine
+
+    def safeSplit( self, line ):
         '''
-        result = TagedElement()
-        
-        sline = self.splitLineCheck( line )
-
-        if len( sline ) != len( self.headerIndex ):
-            print self.headerIndex
-            raise ParseError( "Line should have %d column found %s \n [%s] \n" % ( len( self.headerIndex ), len( sline ) , sline ) )
-        requiredValues = self.parseRequired( sline )
-        optionalValues = self.parseOptional( sline )
-        annotationValues = self.parseAnnotation( sline )
-
-        result.update( requiredValues )
-        result.update( optionalValues )
-        result.annotation = annotationValues
-
-        return result
-
+        Splits the line into a list
+        checks for a wrapper on the elements of the list and removes them
+        @return: [String]
+        '''
+        line.replace( "\n", '' )
+        nline = []
+        for v in line.split(self.delimiter):
+            v = string.replace(v,self.wrapperString,'')
+            v = string.strip(v)
+            nline.append(v)
+        return nline
     
-    def isComment( self, line ):
-        '''
-        Checks a line to see if it is a comment line
-        '''
-        strip_line = string.strip( line )
-        if len( strip_line ) > 0 and strip_line != self.emptyLine:
-            return strip_line[0] == self.comment
-        else:
-            #print "Comment: [%s]" % strip_line
-            return True
-        
+    
     def splitLineCheck( self, line ):
         
         sline = self.safeSplit( line )
@@ -246,6 +240,42 @@ class FlatFileParser:
                 return None
         else:
             return sline
+    
+    def parseLine( self, line ):
+        '''
+        @var line: 
+        @type line: String 
+        @return: [String]
+        #! being updated to remove annotation and just return data for all headers found.
+        '''
+        
+        result = TagedElement()
+        
+        sline = self.splitLineCheck( line )
+
+        if len( sline ) != len( self.headerIndex ):
+            print self.headerIndex
+            raise ParseError( "Line should have %d column found %s \n [%s] \n" % ( len( self.headerIndex ), len( sline ) , sline ) )
+        
+        requiredValues = self.parseRequired( sline )
+        optionalValues = self.parseOptional( sline )
+        annotationValues = self.parseAnnotation( sline )
+
+        result.update( requiredValues )
+        result.update( optionalValues )
+        result.annotation = annotationValues
+
+        return result
+
+    def isComment( self, line ):
+        '''
+        Checks a line to see if it is a comment line
+        '''
+        strip_line = string.strip( line )
+        if len( strip_line ) > 0 and strip_line != self.emptyLine:
+            return strip_line[0] == self.comment
+        else:
+            return True
         
     def getNextLine(self):
         try:
@@ -254,26 +284,6 @@ class FlatFileParser:
             line = None
         return line
         
-    def startFile(self,fileName):
-        self.fileHandle = open(fileName,'r')
-        self.index = 0
-        line = self.getNextLine()
-        while line != None:
-            if self.isComment( line ):
-                self.index += 1
-            elif self.index < self.startLine:
-                self.index += 1
-            elif self.index == self.headerLine:
-                self.checkHeader( line )
-                self.index += 1
-                return True
-            elif self.index > self.startLine:
-                value = self.parseLine( line )
-                self.index += 1
-                return False
-            line = self.getNextLine()
-        return False     
-
     def getLine(self):
         result = None
         line = self.getNextLine()
@@ -330,24 +340,64 @@ class FlatFileParser:
                 result.append(sLine)
             index += 1
         return result
-            
     
-    def parseGenericHeader(self, headerLine, unique = True):
-        hLine = self.safeSplit( headerLine )
-        hLineSet = sets.Set( hLine )
-
-        if len( hLineSet ) != len( hLine ) and unique:
-            raise ParseError( "Duplicate column name %s" % ( hLine ) )
-
-        if self.setHeader(hLine ):
-            self.indexHeader( hLine )        
+    def parseToMap( self, fileName, keyTag, valueTag = None, multi=False ):
+        result = {}
+        self.startFile(fileName)
+        d = self.getLine()
         
-        return hLine
-
-    def xparseGenericReport(self, fileName, key=None, unique = True):
+        while d != None:
+            if d != "":
+                keyName = d[keyTag]
+                del d[keyTag]
+                
+                if valueTag:
+                    value = d[valueTag]
+                else:
+                    value = d
+                
+                if multi and valueTag:
+                    if keyName not in result.keys():
+                        result[keyName] = []
+                    result[keyName].append(value)
+                else:
+                    result[keyName] = value
+            
+            d = self.getLine()
+            
+        self.closeFile()
+        return result
+        
+    def parseAnyToMap(self,header,fileName,keyTag,valueTags=None):
+        self.setHeader(header)
+        result = self.parseToMap(fileName,keyTag,valueTags)
+        return result
+    
+    def startFile(self,fileName):
         '''
-        checking for removal
+        Works through lines of file to find the start of the section to be parsed.
         '''
+        self.fileHandle = open(fileName,'r')
+        self.index = 0
+        line = self.getNextLine()
+        while line != None:
+            if self.isComment( line ):
+                self.index += 1
+            elif self.index < self.startLine:
+                self.index += 1
+            elif self.index == self.headerLine:
+                self.checkHeader( line )
+                self.index += 1
+                return True
+            elif self.index > self.startLine:
+                raise ParseError("Attempted to check start line past index of starting line")
+                self.index += 1
+                return False
+            line = self.getNextLine()
+        return False
+    
+    
+    def parseGenericReport(self, fileName, key=None, unique = True):
         result = Report()
         header = None
         kIndex = None
@@ -385,39 +435,7 @@ class FlatFileParser:
         lines.close()
         return result
     
-    def parseToMap( self, fileName, keyTag, valueTag = None, multi=False ):
-        result = {}
-        self.startFile(fileName)
-        d = self.getLine()
-        
-        while d != None:
-            if d != "":
-                keyName = d[keyTag]
-                del d[keyTag]
-                
-                if valueTag:
-                    value = d[valueTag]
-                else:
-                    value = d
-                
-                if multi and valueTag:
-                    if keyName not in result.keys():
-                        result[keyName] = []
-                    result[keyName].append(value)
-                else:
-                    result[keyName] = value
-            
-            d = self.getLine()
-            
-        self.closeFile()
-        return result
-        
-    def parseAnyToMap(self,header,fileName,keyTag,valueTags=None):
-        self.setHeader(header)
-        result = self.parseToMap(fileName,keyTag,valueTags)
-        return result
-    
-    def parseToReport( self, fileName, keyTag, header = None):
+    def parseToReport( self, fileName, keyTag, header = None, unique = True):
         '''
         @var fileName: name of flat (delimited) in text format to be parsed
         @type fileName: String
@@ -427,6 +445,7 @@ class FlatFileParser:
         Primary Function
         Parses flat file returns report object.
         '''
+    
         if header != None:
             self.setHeader(header)
             
@@ -435,7 +454,7 @@ class FlatFileParser:
         d = self.getLine()
         
         if header == None:
-            self.parseGenericHeader(headerLine=d, unique=True)
+            self.parseGenericHeader(headerLine=d, unique=unique)
             d = self.getLine()
         
         while d != None:
