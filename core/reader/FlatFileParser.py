@@ -94,9 +94,47 @@ class FlatFileParser:
             headerMap[h] = h
         self.addRequiredHeaders(headerMap)
 
+    def _safeSplit( self, line ):
+        '''
+        @type line: String
+        @return: [String]
+        @summary:
+        Splits the line into a list
+        checks for a wrapper on the elements of the list and removes them
+        '''
+        line.replace( "\n", '' )
+        nline = []
+        for v in line.split(self.delimiter):
+            v = string.replace(v,self.wrapperString,'')
+            v = string.strip(v)
+            nline.append(v)
+        return nline
+    
+    def _splitLineCheck( self, line ):
+        '''
+        @type line: String
+        @return: [String]
+        @summary:
+        Splits the line into a list
+        checks for a wrapper on the elements of the list and removes them
+        '''
+        sline = self._safeSplit( line )
+        
+        if len( sline ) != len( self.headerIndex ):
+            if ( self.failLine ):
+                print self.headerIndex
+                raise ParseError( "Line should have %d column found %s \n [%s] \n" % ( len( self.headerIndex ), len( sline ) , sline ) )
+            else:
+                return None
+        else:
+            return sline
+        
     def checkRequiredHeaders( self, line ):
         '''
+        @var line: list of Strings to be checked for required headers
+        @type line: [String] 
         Checks the header line to see if required headers are present.
+        @return boolean
         '''
         rheaders = sets.Set( self.requiredHeaderMap.keys() )
         sLine = sets.Set( line )
@@ -109,7 +147,12 @@ class FlatFileParser:
         
         return False
 
-    def indexHeader( self, line ):
+    def _indexHeader( self, line ):
+        '''
+        @summary:
+        Find index of each header in the line.
+        Used for matching headers to data.
+        '''
         index = 0
         for value in line:
             self.headerIndex[value] = index
@@ -125,23 +168,6 @@ class FlatFileParser:
             return self.emptyData
         else:
             return v
-        
-    def parseLineToHeader(self, line, headerMap, required = False):
-        '''
-        Parses map of list of data matching to required headers
-        '''
-        result = {}
-        for header in headerMap.keys():
-            dataName = headerMap[header]
-            if self.headerIndex.has_key( header ):
-                index  = self.headerIndex[header]
-                value = line[index]
-                result[dataName] = self.checkFieldValue( value )
-            elif required:
-                raise ParseError("Failed to find required header [%s]" % header)
-            else:
-                result[dataName] = self.emptyData
-        return result
 
     def parseRequired( self, line ):
         '''
@@ -185,63 +211,8 @@ class FlatFileParser:
                 value = line[index]
                 result[headerName] = self.checkFieldValue(value)
         return result
-
-    def checkHeader( self, headerLine ):
-
-        hLine = self.safeSplit( headerLine )
-        hLineSet = sets.Set( hLine )
-        
-        #print hLine
-
-        if len( hLineSet ) != len( hLine ):
-            raise ParseError( "Duplicate column name %s" % ( hLine ) )
-
-        if self.checkRequiredHeaders( hLine ):
-            self.indexHeader( hLine )        
-        
-        return True
     
-    def parseGenericHeader(self, headerLine, unique = True):
-        hLine = self.safeSplit( headerLine )
-        hLineSet = sets.Set( hLine )
-
-        if len( hLineSet ) != len( hLine ) and unique:
-            raise ParseError( "Duplicate column name %s" % ( hLine ) )
-
-        if self.setHeader(hLine ):
-            self.indexHeader( hLine )        
-        
-        return hLine
-
-    def safeSplit( self, line ):
-        '''
-        Splits the line into a list
-        checks for a wrapper on the elements of the list and removes them
-        @return: [String]
-        '''
-        line.replace( "\n", '' )
-        nline = []
-        for v in line.split(self.delimiter):
-            v = string.replace(v,self.wrapperString,'')
-            v = string.strip(v)
-            nline.append(v)
-        return nline
-    
-    
-    def splitLineCheck( self, line ):
-        
-        sline = self.safeSplit( line )
-        
-        if len( sline ) != len( self.headerIndex ):
-            if ( self.failLine ):
-                print self.headerIndex
-                raise ParseError( "Line should have %d column found %s \n [%s] \n" % ( len( self.headerIndex ), len( sline ) , sline ) )
-            else:
-                return None
-        else:
-            return sline
-    
-    def parseLine( self, line ):
+    def parseTagedLine( self, line ):
         '''
         @var line: 
         @type line: String 
@@ -251,7 +222,7 @@ class FlatFileParser:
         
         result = TagedElement()
         
-        sline = self.splitLineCheck( line )
+        sline = self._splitLineCheck( line )
 
         if len( sline ) != len( self.headerIndex ):
             print self.headerIndex
@@ -284,7 +255,7 @@ class FlatFileParser:
             line = None
         return line
         
-    def getLine(self):
+    def getTagedLine(self):
         result = None
         line = self.getNextLine()
         if line == None:
@@ -292,13 +263,43 @@ class FlatFileParser:
         elif self.isComment( line ):
             result = ""
         elif self.index > self.startLine:
-            value = self.parseLine( line )
+            value = self.parseTagedLine( line )
             result = value
         self.index += 1
         return result
         
     def closeFile(self):
         self.fileHandle.close()
+        
+    def checkHeader( self, headerLine):
+
+        hLine = self._safeSplit( headerLine )
+        hLineSet = sets.Set( hLine )
+
+        if len( hLineSet ) != len( hLine ):
+            raise ParseError( "Duplicate column name %s" % ( hLine ) )
+
+        if self.checkRequiredHeaders( hLine ):
+            self._indexHeader( hLine )
+            return True
+        
+        return False
+    
+    def parseHeader(self, headerLine, unique = True):
+        hLine = self._safeSplit( headerLine )
+        hLineSet = sets.Set( hLine )
+
+        if len( hLineSet ) != len( hLine ) and unique:
+            raise ParseError( "Duplicate column name %s" % ( hLine ) )
+
+        if self.requiredHeaderMap != {}:
+            if not self.checkRequiredHeaders(hLine):
+                raise ParseError("Failed to find required headers [%s].\n  In line [%s}" % (hLine))
+
+        self.setHeader(hLine )
+        self._indexHeader( hLine )
+        
+        return hLine
 
     def parseFile( self, fileName ):
         '''
@@ -321,7 +322,7 @@ class FlatFileParser:
             elif index == self.headerLine:
                 self.checkHeader( line )
             elif index > self.startLine:
-                value = self.parseLine( line )
+                value = self.parseTagedLine( line )
                 result.append( value )
             index += 1
             
@@ -336,7 +337,7 @@ class FlatFileParser:
             if self.isComment( line ):
                 pass
             elif self.endLine >= index >= self.startLine:
-                sLine = self.safeSplit(line)
+                sLine = self._safeSplit(line)
                 result.append(sLine)
             index += 1
         return result
@@ -344,7 +345,7 @@ class FlatFileParser:
     def parseToMap( self, fileName, keyTag, valueTag = None, multi=False ):
         result = {}
         self.startFile(fileName)
-        d = self.getLine()
+        d = self.getTagedLine()
         
         while d != None:
             if d != "":
@@ -363,7 +364,7 @@ class FlatFileParser:
                 else:
                     result[keyName] = value
             
-            d = self.getLine()
+            d = self.getTagedLine()
             
         self.closeFile()
         return result
@@ -375,8 +376,12 @@ class FlatFileParser:
     
     def startFile(self,fileName):
         '''
-        Works through lines of file to find the start of the section to be parsed.
+        @summary:
+        Find header and checks for required headers.
+        Indexes headers 
+        Finds first line to start parsing delimited file. 
         '''
+        
         self.fileHandle = open(fileName,'r')
         self.index = 0
         line = self.getNextLine()
@@ -386,7 +391,8 @@ class FlatFileParser:
             elif self.index < self.startLine:
                 self.index += 1
             elif self.index == self.headerLine:
-                self.checkHeader( line )
+                if not self.checkHeader( line ):
+                    raise ParseError("failed to find required headers")
                 self.index += 1
                 return True
             elif self.index > self.startLine:
@@ -397,9 +403,18 @@ class FlatFileParser:
         return False
     
     
-    def parseGenericReport(self, fileName, key=None, unique = True):
+    def parseGenericReport(self, fileName, keyTag=None, header = None, unique = True):
+        '''
+        @var fileName: name of flat (delimited) in text format to be parsed
+        @type fileName: String
+        @var keyTag: ID of column to be used for report key row
+        @type keyTag: String
+        @summary: 
+        Primary Function
+        Parses flat file returns report object.
+        '''
+        
         result = Report()
-        header = None
         kIndex = None
         lines = open( fileName, 'r' )
         index = 0
@@ -414,12 +429,12 @@ class FlatFileParser:
                 continue
             
             elif index == self.headerLine:
-                header = self.parseGenericHeader( line, unique )
-                if key in header:
-                    kIndex = header.index(key)
+                header = self.parseHeader( line, unique )
+                if keyTag in header:
+                    kIndex = header.index(keyTag)
                     
             elif self.endLine > index > self.startLine:
-                sLine =self.safeSplit(line)
+                sLine =self._safeSplit(line)
                 if kIndex != None:
                     rName = sLine[kIndex]
                 else:
@@ -451,11 +466,7 @@ class FlatFileParser:
             
         result = Report()
         self.startFile(fileName)
-        d = self.getLine()
-        
-        if header == None:
-            self.parseGenericHeader(headerLine=d, unique=unique)
-            d = self.getLine()
+        d = self.getTagedLine()
         
         while d != None:
             if d != "":
@@ -466,7 +477,7 @@ class FlatFileParser:
                     v = d[valueTag]
                     result.addElement(keyName,valueTag,v)
 
-            d = self.getLine()
+            d = self.getTagedLine()
             
         self.closeFile()
         return result
@@ -488,7 +499,7 @@ class SmallMoleculeFlatFileParser( FlatFileParser ):
     def parse( self, file ):
         result = {} #currently reaction are parsed in an unordered form.
         self.startFile(file)
-        d = self.getLine()
+        d = self.getTagedLine()
         
         while d != None:
             if d != "":
@@ -501,7 +512,7 @@ class SmallMoleculeFlatFileParser( FlatFileParser ):
             for term in self.optionalHeaderMap.keys():
                 if term in d.keys():
                     m[term] = d[term]
-            d = self.getLine()
+            d = self.getTagedLine()
             result[name] = m
             
         self.closeFile()
@@ -525,7 +536,7 @@ class ReactionFlatFileParser( FlatFileParser ):
         rxnParser = ReactionParser()
         result = {} #currently reaction are parsed in an unordered form.
         self.startFile(rxnfile)
-        d = self.getLine()
+        d = self.getTagedLine()
         
         while d != None:
             if d != "":
@@ -537,7 +548,7 @@ class ReactionFlatFileParser( FlatFileParser ):
                 
                 result[d["Name"]] = reaction
                 
-            d = self.getLine()
+            d = self.getTagedLine()
             
         self.closeFile()
         return result
@@ -585,7 +596,7 @@ class  FluxLimitFlatFileParser( FlatFileParser ):
                     self.checkHeader( line )
                     isHeader = False
                 else:
-                    d = self.parseLine( line )
+                    d = self.parseTagedLine( line )
                     lower = d["Lower"]
                     upper = d["Upper"]
                     
@@ -625,7 +636,7 @@ class ObjectiveFlatFileParser( FlatFileParser ):
                     self.checkHeader( line )
                     isHeader = False
                 else:
-                    d = self.parseLine( line )
+                    d = self.parseTagedLine( line )
                     objective[d["Flux"]] = d["Coefficient"]
 
         return objective
@@ -944,12 +955,12 @@ class AnnotationFlatFileParser( FlatFileParser ):
     def parse( self, file ):
         result = {}
         self.startFile(file)
-        d = self.getLine()
+        d = self.getTagedLine()
         
         while d != None:
             if d != "":
                 result[d["Name"]] = [d["gene"],d["function"]]
-            d = self.getLine()
+            d = self.getTagedLine()
             
         self.closeFile()
         return result

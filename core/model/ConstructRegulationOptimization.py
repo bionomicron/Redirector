@@ -1,6 +1,6 @@
 '''
 @author: Graham Rockwell
-updated 2012.05.28
+updated 2013.04.02
 Method for constructing Bilevel Redirector Optimization as MILP
 '''
 

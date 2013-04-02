@@ -405,7 +405,7 @@ class ReactionFileParser( FlatFileParser ):
         model = LinearModel()
         rxnParser = ReactionEquationParser()
         self.startFile(file)
-        d = self.getLine()
+        d = self.getTagedLine()
         annotation = {}
         
         while d != None:
@@ -417,7 +417,7 @@ class ReactionFileParser( FlatFileParser ):
                 model.addColumnLimit(name, direction)
                 annotation[name] = d.annotation
             
-            d = self.getLine()
+            d = self.getTagedLine()
             
         self.closeFile()
         model.annotation = annotation 
@@ -436,7 +436,7 @@ class LimitFileParser( FlatFileParser ):
 
     def parse(self, file):
         self.startFile(file)
-        d = self.getLine()
+        d = self.getTagedLine()
         result = {}
         
         while d != None:
@@ -455,7 +455,7 @@ class LimitFileParser( FlatFileParser ):
                 
                 result[name] = (lower,upper)
                 
-            d = self.getLine()
+            d = self.getTagedLine()
             
         self.closeFile()
         
@@ -474,7 +474,7 @@ class ObjectiveFileParser( FlatFileParser ):
 
     def parse(self, file):
         self.startFile(file)
-        d = self.getLine()
+        d = self.getTagedLine()
         result = {}
         
         while d != None:
@@ -483,7 +483,7 @@ class ObjectiveFileParser( FlatFileParser ):
                 value = d["Coefficient"]
                 result[name] = float(value)
                 
-            d = self.getLine()
+            d = self.getTagedLine()
             
         self.closeFile()
         
