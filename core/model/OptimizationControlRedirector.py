@@ -682,7 +682,7 @@ class OptimizationControlRedirector:
         # Set values
         #--------------------------
         
-        self._intitalizeModelConstructor(model, minNaturalVal, primeBounds=None)
+        self._intitalizeModelConstructor(model, minNaturalVal, primeBounds=self.primeBounds)
         
         searchNeighborhood = self.con.controlMax
         targets = self.targets
@@ -723,7 +723,8 @@ class OptimizationControlRedirector:
         maxEffect = 0
         maxNatural = 0
         finalPredictionValue = None
-        finalCheckValue = None    
+        finalCheckValue = None
+        finalNaturalCoefficient = 0.0    
         iObjective = {self.syntheticObjectiveName:-1}
         checkPredV = {}
     
@@ -820,11 +821,19 @@ class OptimizationControlRedirector:
                 # Calculate updated natural parameter 
                 #--------------------------------------------------------
                                 
-                (effectValue,naturalCoefficient) = self.progressiveSearchParameter(ltPredV,pPredValue,oPredVal,sPredVal,iObjective,naturalCoefficient,pNaturalCoefficient,pEffectValue,maxNatural,maxEffect)
-                pEffectValue = effectValue        
-                
+                (effectValue,newNaturalCoefficient) = self.progressiveSearchParameter(ltPredV,pPredValue,oPredVal,sPredVal,iObjective,naturalCoefficient,pNaturalCoefficient,pEffectValue,maxNatural,maxEffect)
+                        
                 print "-------------Search loop complete-----------"
                 print "Setting search position"
+                
+                if effectValue >= maxEffect and ltSynthVal > synthValLower:
+                    if self.verbose: print "New optimal design found production [%s] vs Natural [%s] => [%s] control impact = [%s] > [%s]" % (syntheticObjective,naturalCoefficient,ltSynthVal,effectValue,maxEffect)
+                    finalPredictionValue = ltPredV
+                    finalNaturalCoefficient = naturalCoefficient
+                    maxEffect = effectValue
+                                 
+                pEffectValue = effectValue
+                naturalCoefficient = newNaturalCoefficient
 
         ''''                 
         ================================================
@@ -836,7 +845,10 @@ class OptimizationControlRedirector:
     
         if finalPredictionValue == None:
             finalPredictionValue = ltPredV
+            finalNaturalCoefficient = naturalCoefficient
         
+        self.con.objectiveCoeffecent = finalNaturalCoefficient
+        tmodel = self.reconstructControlModel(originalModel,controlNames,ltPredV)    
         (fObjective,iGeneObjective,ltSynthVal,finalPreditionValue,checkSynthVal) = self.findCurrentObjective(finalPredictionValue,model,originalModel,controlNames,geneClusters)
         
         ltReport = self.con.createReport(finalPredictionValue,originalFluxNames,targets,geneClusters)
@@ -1149,11 +1161,11 @@ class OptimizationControlRedirector:
         ltPredV = lt.getMipPredictionMap()
         ltBioVal = ltPredV[self.naturalObjectiveName]
         ltSynthVal = ltPredV[self.syntheticObjectiveName]
-        ltRowStatus = lt.getRowsStatus()
-        ltColumnStatus = lt.getColumnsStatus() 
+        #ltRowStatus = lt.getRowsStatus()
+        #ltColumnStatus = lt.getColumnsStatus() 
         targets = originalModel.getColumnNames()
         
-        if sCode != "OPTIMAL" and sCode != 200:
+        if sCode != "OPTIMAL" and sCode != 200 and sCode != "optimal solution found":
             if self.verbose: print "Failure to find optimal solution Code: %s" % (sCode)
             dumpFileName = "Test_Optimization_Failure_%s_%s" % (testName,sCode)
             lt.writeMPS(dumpFileName + ".mps")
@@ -1164,8 +1176,8 @@ class OptimizationControlRedirector:
         if fullReport:
             
             modelReport = tmodel.modelReport(prediction=oPrediction)
-            modelReport.addColumnHash("status",ltRowStatus)
-            modelReport.addColumnHash("status",ltColumnStatus)
+            #modelReport.addColumnHash("status",ltRowStatus)
+            #modelReport.addColumnHash("status",ltColumnStatus)
             writer = ReportWriter()
             writer.setFile(dumpFileName + ".csv")
             writer.write(modelReport) 
@@ -1178,7 +1190,7 @@ class OptimizationControlRedirector:
         if self.verbose: print "Current objective[%s]: %s" % (str(len(iObjective)),iObjective)
         if self.verbose: print "Current Natural [%s] Synthetic [%s]" % (ltBioVal,ltSynthVal)
         (iGeneObjective,iOtherObjective) = (None,None)
-        if self.useGeneMap:
+        if self.useGeneMap and self.rGeneMap != None:
             (iGeneObjective,iOtherObjective) = self.printGeneObjective(iObjective)
             if self.verbose: print "Current Genetic objective[%s]: %s" % (str(len(iGeneObjective)),iGeneObjective)
             if self.verbose: print "Current Other objective: %s" % (iOtherObjective)
@@ -1197,6 +1209,7 @@ class OptimizationControlRedirector:
         self.con.controlMin = 0
         self.con.controlMax = 0
         
+        self._intitalizeModelConstructor(originalModel, minNaturalValue=0.2, primeBounds=self.primeBounds)
         controlNames = self.getControlNames(self.targets)
         tmodel = self.reconstructControlModel(originalModel,controlNames,{})        
         #-----------------------------

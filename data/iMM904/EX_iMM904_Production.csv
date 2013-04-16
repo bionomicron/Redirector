@@ -1,4 +1,5 @@
 Index	Abbreviation	OfficialName	Equation	Section	ValidTarget	reconstruction directionality	subSystem	proteinClass	GeneAssociation	reaction with marvin charges (pH7)	reaction with marvin charges (pH 7.2)	delta G (pH 7)	mM delta G (pH 7)	min delta G (pH 7)	max delta G (pH 7)	delta G (pH 7.2)	uncertainty in delta G (pH 7 or pH 7.2)	mM delta G (pH 7.2)	min delta G (pH 7.2)	max delta G (pH 7.2)	directionality without uncertainty (pH 7.2)	directionality with uncertainty (pH 7.2)
+1	EX_accoa	malonyl coa export with coa recycled	[c] : accoa --> coa	accoa	FALSE	forward only	export from fatty acid cycle		xaccoa													
 1	EX_malcoa	malonyl coa export with coa recycled	[c] : malcoa --> coa	malcoa	FALSE	forward only	export from fatty acid cycle		xmalcoa			0	0	0	0	0	0	0	0	-30.3	0	forward only
 2	EX_C14n0_CoA	Tetradecanoyl-CoA (n-C14:0CoA)	[c] : tdcoa--> coa	C14n0_CoA	FALSE	forward only	export from fatty acid cycle		xC14n0			0	0	0	0	0	0	0	0	-30.3	0	forward only
 3	EX_C14n1_CoA	Tetradecenoyl-CoA (n-C14:1CoA)	[c] : tdecoa--> coa	C14n1_CoA	FALSE	forward only	export from fatty acid cycle		xC14n1			0	0	0	0	0	0	0	0	-30.3	0	forward only

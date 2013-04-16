@@ -19,7 +19,8 @@ Example usage:
 >python Redirecror.py -n "Test iAF1260"
 
 '''
-#from core.model.LinearModelSensitivity import LinearModelVariableBoundarys,enzymeBoundaryControl
+from core.model.LinearModelSensitivity import LinearModelVariableBoundarys
+#enzymeBoundaryControl
 #from core.model.LinearModelTools import ValidateModel
 from core.model.ModelFactory import ModelFactory
 from core.model.ConstructRegulationOptimization import ConstructRegulationOptimization
@@ -282,15 +283,16 @@ def main_function():
     #-------------------------------------------------------------------
         
     primeFluxBoundaries = {}
-    objectiveMinPercent = 0.00
+    objectiveMinPercent = 0.20
     boundarySearchSize = 1
     boundaryTargets = targets
     boundaryReportFileName = "rd_flux_boundary_t%s_p%s_s%s_analysis.csv" % (len(targets),objectiveMinPercent,boundarySearchSize)
     
     fluxBoundariesFile = None
     print "Prime Bounds [%s]" % options.primeBounds
-
-    if options.primeBounds and False:
+    naturalFluxBounds = None
+    
+    if options.primeBounds:
         
         #fluxBoundariesFile = "ControlLibraries/FluxBounds_%s_%s_%s" % (modelName,objectiveName,syntheticObjectiveName)    
         print "finding natural flux bounds"
@@ -373,8 +375,9 @@ def main_function():
     redirector.con = con
     redirector.controlFactory = processLibrary
     redirector.controlLibraries = controlLibraries
+    redirector.primeBounds = naturalFluxBounds
     #redirector.targets = targets
-    #redirector.rGeneMap = modelMatrix.controlMap
+    redirector.rGeneMap = modelMatrix.controlMap
     #redirector.modelName = modelName
     redirector.naturalObjectiveName = objectiveName
     redirector.syntheticObjectiveName = syntheticObjectiveName

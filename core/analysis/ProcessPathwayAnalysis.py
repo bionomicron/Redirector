@@ -417,7 +417,8 @@ def controlDependencies(originalModel,resultTag,options,targetPercent,searchDept
     totalTargets = len(targets)
         
     print "Largest Design Set [%s], Total targets [%s]" % (maxTargetSize,totalTargets)
-    print "Performing dependency analysis on [%s] t
+    print "Performing dependency analysis on [%s] t" 
+    #! this appears broken
         result = result.union(controlNames)
         finalConstructor.extendControl(con)
         
