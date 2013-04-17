@@ -520,14 +520,17 @@ class OptimizationControlRedirector:
                                  
         return (rValue,sEffectValue,bioAdjust)
     
-    def findCurrentObjective(self,prediction,model,originalModel,controlNames,geneClusters):
+    def findCurrentObjective(self,prediction,model,controlNames,geneClusters):
+        '''
+        Run Redirector 
+        '''
         ltPredV = prediction
         ltBioVal = ltPredV[self.naturalObjectiveName]
         ltSynthVal = ltPredV[self.syntheticObjectiveName]
         resultPass = True
 
         if self.verbose: print "\n======================Optimization Result======================"
-        (iObjective,iLibObjective) = self.con.generateObjective(originalModel, controlNames, ltPredV)
+        (iObjective,iLibObjective) = self.con.generateObjective(model, controlNames, ltPredV)
         if self.verbose: print "Current objective[%s]: %s" % (str(len(iObjective)),iObjective)
         if self.verbose: print "--> library source objective[%s]: %s" % (str(len(iLibObjective)),iLibObjective)
         (iGeneObjective,iOtherObjective) = (None,None)
@@ -542,7 +545,7 @@ class OptimizationControlRedirector:
         #--------------------------------------
         if(True):
             lpCheck = self._solverFactory()
-            checkPredV = lpCheck.run(model=originalModel,objective = iObjective)
+            checkPredV = lpCheck.run(model=model,objective = iObjective)
             checkNaturalValue = checkPredV[self.naturalObjectiveName]
             checkSynthVal = checkPredV[self.syntheticObjectiveName]
             lpCheck.clear()
@@ -552,6 +555,31 @@ class OptimizationControlRedirector:
             
         return (iObjective,iGeneObjective,ltSynthVal,checkPredV,checkSynthVal) 
         
+
+    def redirectorModelOptimization(self,tmodel,model,controlNames,geneClusters,runTag,reports=False):
+        iTime = time()
+        (lt,sCode) = self.runOptimization(tmodel,runTag)
+        iRunTime = time() - iTime
+        
+        if self.verbose: print "Optimization Completed: Code [%s] Time [%s]" % (sCode,iRunTime)
+                
+        if sCode == None:
+            if self.verbose: print "Failure to find optimal solution: breaking search loop"
+        else:
+            if self.verbose: print "--> Optimal solution found"
+        
+        ltPredV = lt.getMipPredictionMap()
+                
+        lt.clear()
+        
+        #----------------------------------------------------------
+        # Process and print current state of optimization search
+        #----------------------------------------------------------
+                
+        (iObjective,iGeneObjective,ltSynthVal,checkPredVal,checkSynthVal) = self.findCurrentObjective(ltPredV,model,controlNames,geneClusters)                
+            
+        return (ltPredV,iObjective,iGeneObjective,ltSynthVal,checkPredVal,checkSynthVal)
+    
     def progressiveSearchParameter(self,pred,pPred,naturalOpt,synthOpt,iObjective,naturalCoefficient,pNaturalCoefficient,pEffectValue,maxNatural,maxEffect):
         
         #--------------------------------------------------------
@@ -786,32 +814,15 @@ class OptimizationControlRedirector:
                     if self.verbose: print "Activating set targets [%s]" % activeControls
                     self.con.activateControl(tmodel,activeControls,on=True)
                     activeControls = None
-                    
+                
                 #-----------------------------
                 # Run optimization
                 #-----------------------------
                 if self.verbose: print "\n=====================Optimizing Framework====================="
-                
                 runTag = "%s_%s_%s_k%s_i%s" % (self.control,self.naturalObjectiveName,self.syntheticObjectiveName,searchNeighborhood,i)
-                (lt,sCode) = self.runOptimization(tmodel,runTag)
-                iRunTime = time() - iTime
-                if self.verbose: print "Optimization Completed: Code [%s] Time [%s]" % (sCode,iRunTime)
-                
-                if sCode == None:
-                    if self.verbose: print "Failure to find optimal solution: breaking search loop"
-                    break
-                else:
-                    if self.verbose: print "--> Optimal solution found"
                 pPredValue = ltPredV
-                ltPredV = lt.getMipPredictionMap()
+                (ltPredV,iObjective,iGeneObjective,ltSynthVal,checkPredVal,checkSynthVal) = self.redirectorModelOptimization(tmodel,model,controlNames,geneClusters,runTag,reports=False)
                 
-                lt.clear()
-        
-                #----------------------------------------------------------
-                # Process and print current state of optimization search
-                #----------------------------------------------------------
-                
-                (iObjective,iGeneObjective,ltSynthVal,checkPredVal,checkSynthVal) = self.findCurrentObjective(ltPredV,model,originalModel,controlNames,geneClusters)                
                 if abs(ltSynthVal- checkSynthVal) > max(abs(ltSynthVal *0.25),1.0):
                     print "Large model prediction inaccuracy"
                     print "==========breaking search loop!=========="
@@ -849,7 +860,7 @@ class OptimizationControlRedirector:
         
         self.con.objectiveCoeffecent = finalNaturalCoefficient
         tmodel = self.reconstructControlModel(originalModel,controlNames,ltPredV)    
-        (fObjective,iGeneObjective,ltSynthVal,finalPreditionValue,checkSynthVal) = self.findCurrentObjective(finalPredictionValue,model,originalModel,controlNames,geneClusters)
+        (fObjective,iGeneObjective,ltSynthVal,finalPreditionValue,checkSynthVal) = self.findCurrentObjective(finalPredictionValue,model,controlNames,geneClusters)
         
         ltReport = self.con.createReport(finalPredictionValue,originalFluxNames,targets,geneClusters)
         #ltReport["confirm"] = finalCheckValue
@@ -1151,7 +1162,9 @@ class OptimizationControlRedirector:
         return report
     
     def testOpt(self,tmodel,originalModel,targets,oPrediction=None,testName = "test",fullReport = False):
-        
+        '''
+        Run short optimization and check output for optimization failures.
+        '''
         try:
             (lt,sCode) = self.runOptimization(tmodel)
         except:
@@ -1161,8 +1174,6 @@ class OptimizationControlRedirector:
         ltPredV = lt.getMipPredictionMap()
         ltBioVal = ltPredV[self.naturalObjectiveName]
         ltSynthVal = ltPredV[self.syntheticObjectiveName]
-        #ltRowStatus = lt.getRowsStatus()
-        #ltColumnStatus = lt.getColumnsStatus() 
         targets = originalModel.getColumnNames()
         
         if sCode != "OPTIMAL" and sCode != 200 and sCode != "optimal solution found":
@@ -1172,12 +1183,9 @@ class OptimizationControlRedirector:
         else:
             dumpFileName = "Test_Optimization_success_%s_%s" % (testName,sCode)
         
-            
         if fullReport:
             
             modelReport = tmodel.modelReport(prediction=oPrediction)
-            #modelReport.addColumnHash("status",ltRowStatus)
-            #modelReport.addColumnHash("status",ltColumnStatus)
             writer = ReportWriter()
             writer.setFile(dumpFileName + ".csv")
             writer.write(modelReport) 
@@ -1199,6 +1207,7 @@ class OptimizationControlRedirector:
     
     
     def testDesignOptimization(self,originalModel,fullTest = False):
+        
         #---------------------------------------
         # adjust model
         #---------------------------------------
@@ -1212,6 +1221,7 @@ class OptimizationControlRedirector:
         self._intitalizeModelConstructor(originalModel, minNaturalValue=0.2, primeBounds=self.primeBounds)
         controlNames = self.getControlNames(self.targets)
         tmodel = self.reconstructControlModel(originalModel,controlNames,{})        
+        
         #-----------------------------
         # Run optimization
         #-----------------------------
