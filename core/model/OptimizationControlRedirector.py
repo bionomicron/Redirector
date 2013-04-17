@@ -520,7 +520,7 @@ class OptimizationControlRedirector:
                                  
         return (rValue,sEffectValue,bioAdjust)
     
-    def findCurrentObjective(self,prediction,model,controlNames,geneClusters):
+    def findCurrentObjective(self,prediction,model,controlNames,geneClusters=None):
         '''
         Run Redirector 
         '''
@@ -556,22 +556,39 @@ class OptimizationControlRedirector:
         return (iObjective,iGeneObjective,ltSynthVal,checkPredV,checkSynthVal) 
         
 
-    def redirectorModelOptimization(self,tmodel,model,controlNames,geneClusters,runTag,reports=False):
+    def redirectorModelOptimization(self,tmodel,model,controlNames,geneClusters,runTag,report=False):
         iTime = time()
-        (lt,sCode) = self.runOptimization(tmodel,runTag)
+        
+        try:
+            (lt,sCode) = self.runOptimization(tmodel,runTag)
+        except:
+            print "----------------optimization test failure-----------------------"
+            return None
+        
         iRunTime = time() - iTime
         
         if self.verbose: print "Optimization Completed: Code [%s] Time [%s]" % (sCode,iRunTime)
-                
         if sCode == None:
             if self.verbose: print "Failure to find optimal solution: breaking search loop"
+            dumpFileName = "Optimization_success_%s_%s" % (runTag,sCode)
         else:
             if self.verbose: print "--> Optimal solution found"
+            dumpFileName = "Optimization_Failure_%s_%s" % (runTag,sCode)
+            lt.writeMPS(dumpFileName + ".mps")
         
         ltPredV = lt.getMipPredictionMap()
                 
         lt.clear()
         
+        if report:        
+            modelReport = tmodel.modelReport(prediction=ltPredV)
+            writer = ReportWriter()
+            writer.setFile(dumpFileName + ".csv")
+            writer.write(modelReport) 
+            writer.closeFile()
+            
+        lt.clear()
+    
         #----------------------------------------------------------
         # Process and print current state of optimization search
         #----------------------------------------------------------
@@ -821,7 +838,7 @@ class OptimizationControlRedirector:
                 if self.verbose: print "\n=====================Optimizing Framework====================="
                 runTag = "%s_%s_%s_k%s_i%s" % (self.control,self.naturalObjectiveName,self.syntheticObjectiveName,searchNeighborhood,i)
                 pPredValue = ltPredV
-                (ltPredV,iObjective,iGeneObjective,ltSynthVal,checkPredVal,checkSynthVal) = self.redirectorModelOptimization(tmodel,model,controlNames,geneClusters,runTag,reports=False)
+                (ltPredV,iObjective,iGeneObjective,ltSynthVal,checkPredVal,checkSynthVal) = self.redirectorModelOptimization(tmodel,model,controlNames,geneClusters,runTag)
                 
                 if abs(ltSynthVal- checkSynthVal) > max(abs(ltSynthVal *0.25),1.0):
                     print "Large model prediction inaccuracy"
@@ -1161,52 +1178,8 @@ class OptimizationControlRedirector:
         
         return report
     
-    def testOpt(self,tmodel,originalModel,targets,oPrediction=None,testName = "test",fullReport = False):
-        '''
-        Run short optimization and check output for optimization failures.
-        '''
-        try:
-            (lt,sCode) = self.runOptimization(tmodel)
-        except:
-            print "----------------optimization test failure-----------------------"
-            return None
-                    
-        ltPredV = lt.getMipPredictionMap()
-        ltBioVal = ltPredV[self.naturalObjectiveName]
-        ltSynthVal = ltPredV[self.syntheticObjectiveName]
-        targets = originalModel.getColumnNames()
-        
-        if sCode != "OPTIMAL" and sCode != 200 and sCode != "optimal solution found":
-            if self.verbose: print "Failure to find optimal solution Code: %s" % (sCode)
-            dumpFileName = "Test_Optimization_Failure_%s_%s" % (testName,sCode)
-            lt.writeMPS(dumpFileName + ".mps")
-        else:
-            dumpFileName = "Test_Optimization_success_%s_%s" % (testName,sCode)
-        
-        if fullReport:
-            
-            modelReport = tmodel.modelReport(prediction=oPrediction)
-            writer = ReportWriter()
-            writer.setFile(dumpFileName + ".csv")
-            writer.write(modelReport) 
-            writer.closeFile()
-            
-        lt.clear()
-                
-        (iObjective,iLibObjective) = self.con.generateObjective(originalModel, targets, ltPredV)
-        if self.verbose: print "Current library source objective[%s]: %s" % (str(len(iLibObjective)),iLibObjective)
-        if self.verbose: print "Current objective[%s]: %s" % (str(len(iObjective)),iObjective)
-        if self.verbose: print "Current Natural [%s] Synthetic [%s]" % (ltBioVal,ltSynthVal)
-        (iGeneObjective,iOtherObjective) = (None,None)
-        if self.useGeneMap and self.rGeneMap != None:
-            (iGeneObjective,iOtherObjective) = self.printGeneObjective(iObjective)
-            if self.verbose: print "Current Genetic objective[%s]: %s" % (str(len(iGeneObjective)),iGeneObjective)
-            if self.verbose: print "Current Other objective: %s" % (iOtherObjective)
-        
-        return (ltPredV,iObjective)
     
-    
-    def testDesignOptimization(self,originalModel,fullTest = False):
+    def testDesignOptimization(self,originalModel,fullTest = False,binary=True):
         
         #---------------------------------------
         # adjust model
@@ -1228,8 +1201,9 @@ class OptimizationControlRedirector:
         
         #No controls active:
         if self.verbose: print "Testing optimization framework with no controls in on state"
-        objective = self.testOpt(tmodel, originalModel, targets)
-        if objective == None:
+        
+        (ltPredV,iObjective,iGeneObjective,ltSynthVal,checkPredVal,checkSynthVal) = self.redirectorModelOptimization(tmodel,originalModel,controlNames=targets,geneClusters=None,runTag='Toggle0_test',report=False) 
+        if iObjective == None:
             return None
         
         #short version of test
@@ -1249,32 +1223,24 @@ class OptimizationControlRedirector:
             self.useScip = True
             
             self.con.controlMin = 0
-            self.con.controlMax = 1.0
+            if binary:
+                self.con.controlMax = 1.0
+            else:
+                self.con.controlMax = 0.0
             
             tmodel = self.reconstructControlModel(originalModel,targets,{})
-            (predV,obj) = self.testOpt(tmodel, originalModel, targets)
+            (predV,obj,iGeneObjective,ltSynthVal,checkPredVal,checkSynthVal) = self.redirectorModelOptimization(tmodel,originalModel,controlNames=targets,geneClusters=None,runTag='Toggle0_test',report=False)
+            #(predV,obj) = self.testOpt(tmodel, originalModel, targets)
             
             controlNames = controlMap.keys()            
             for controlName in controlNames:
                 controlValues = controlMap[controlName]
-                
+                testTag = prefix+controlName+"_boundary"
                 if self.verbose: print "\nConstructing optimization check [%s] %s => %s" % (name,controlName,controlValues)
-                tmodel = self.con.setControl(tmodel,prefix + "y__",[controlName],on = True, binary = True)        
-                self.testOpt(tmodel, originalModel,targets,testName = prefix+controlName+"_boundary")
-                tmodel = self.con.setControl(tmodel,prefix + "y__",[controlName],on = False, binary = True)
-        
-            self.con.controlMin = 0
-            self.con.controlMax = 0    
-            tmodel = self.reconstructControlModel(originalModel,targets,{})
-            
-            for controlName in controlMap.keys():    
-                controlValues = controlMap[controlName]
-            
-                if self.verbose: print "\nConstructing optimization check [%s] %s => %s" % (name,controlName,controlValues)                    
-                tmodel = self.con.setControl(tmodel,prefix + "y__",[controlName],on = True)        
-                self.testOpt(tmodel, originalModel, targets,testName = prefix+controlName+"_active")
-                tmodel = self.con.setControl(tmodel,prefix + "y__",[controlName],on = False)
-                
+                tmodel = self.con.setControl(tmodel,prefix + "y__",[controlName],on = True, binary = binary)        
+                self.redirectorModelOptimization(tmodel,originalModel,controlNames=targets,geneClusters=None,runTag=testTag,report=False)
+                tmodel = self.con.setControl(tmodel,prefix + "y__",[controlName],on = False, binary = binary)
+                    
         self.con.controlMin = controlMin
         self.con.controlMax = controlMax
 

@@ -283,18 +283,17 @@ def main_function():
     #-------------------------------------------------------------------
         
     primeFluxBoundaries = {}
-    objectiveMinPercent = 0.20
+    objectiveMinPercent = options.bioTarget
     boundarySearchSize = 1
     boundaryTargets = targets
     boundaryReportFileName = "rd_flux_boundary_t%s_p%s_s%s_analysis.csv" % (len(targets),objectiveMinPercent,boundarySearchSize)
-    
-    fluxBoundariesFile = None
+    fluxBoundariesFile = "ControlLibraries/FluxBounds_M%s_O%s_OT%s_S%s" % (modelName,objectiveName,objectiveMinPercent,syntheticObjectiveName)
+
     print "Prime Bounds [%s]" % options.primeBounds
     naturalFluxBounds = None
     
     if options.primeBounds:
         
-        #fluxBoundariesFile = "ControlLibraries/FluxBounds_%s_%s_%s" % (modelName,objectiveName,syntheticObjectiveName)    
         print "finding natural flux bounds"
         naturalFluxBounds = LinearModelVariableBoundarys(modelMatrix, objectiveName=objectiveName, targets=boundaryTargets, pickleFileName = fluxBoundariesFile, minObjectivePercent=objectiveMinPercent,searchSize=boundarySearchSize)
         print "finding production flux bounds"

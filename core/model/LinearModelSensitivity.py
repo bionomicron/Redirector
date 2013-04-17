@@ -196,7 +196,6 @@ def LinearModelVariableBoundarys(originalModel, objectiveName, targets=None, pic
         
         result[nameTag] = (negValue,posValue)
         print "%s < [%s] < %s " % (negValue,nameTag,posValue)
-        pass    
     
     if pickleFileName != None:
         pFile = open(pickleFileName,'w')
