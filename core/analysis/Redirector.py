@@ -286,8 +286,8 @@ def main_function():
     objectiveMinPercent = options.bioTarget
     boundarySearchSize = 1
     boundaryTargets = targets
-    boundaryReportFileName = "rd_flux_boundary_t%s_p%s_s%s_analysis.csv" % (len(targets),objectiveMinPercent,boundarySearchSize)
-    fluxBoundariesFile = "ControlLibraries/FluxBounds_M%s_O%s_OT%s_S%s" % (modelName,objectiveName,objectiveMinPercent,syntheticObjectiveName)
+    boundaryReportFileName = "rd_flux_boundary_M_%s_t_%s_p_%s_s_%s_analysis.csv" % (modelName,len(targets),objectiveMinPercent,boundarySearchSize)
+    fluxBoundariesFile = "ControlLibraries/FluxBounds_M_%s_O_%s_T_%s_S_%s" % (modelName,objectiveName,objectiveMinPercent,syntheticObjectiveName)
 
     print "Prime Bounds [%s]" % options.primeBounds
     naturalFluxBounds = None

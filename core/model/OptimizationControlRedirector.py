@@ -536,7 +536,7 @@ class OptimizationControlRedirector:
         (iGeneObjective,iOtherObjective) = (None,None)
         if self.useGeneMap:
             (iGeneObjective,iOtherObjective) = self.printGeneObjective(iObjective,geneClusters)
-            aGeneObjective = self._annotateObjective(iObjective, model, "bnumber", regex="[a-zA-Z0-9\(\)]+")    
+            aGeneObjective = self._annotateObjective(iObjective, model, "gene number", regex="[a-zA-Z0-9\(\)]+")    
             if self.verbose: print "Current Genetic objective[%s]: %s" % (str(len(aGeneObjective)),aGeneObjective)
             if self.verbose: print "Current Other objective: %s" % (iOtherObjective)
             
@@ -570,12 +570,12 @@ class OptimizationControlRedirector:
         if self.verbose: print "Optimization Completed: Code [%s] Time [%s]" % (sCode,iRunTime)
         if sCode == None:
             if self.verbose: print "Failure to find optimal solution: breaking search loop"
-            dumpFileName = "Optimization_success_%s_%s" % (runTag,sCode)
-        else:
-            if self.verbose: print "--> Optimal solution found"
             dumpFileName = "Optimization_Failure_%s_%s" % (runTag,sCode)
             lt.writeMPS(dumpFileName + ".mps")
-        
+        else:
+            if self.verbose: print "--> Optimal solution found"
+            dumpFileName = "Optimization_Success_%s_%s" % (runTag,sCode)
+            
         ltPredV = lt.getMipPredictionMap()
                 
         lt.clear()
@@ -795,8 +795,7 @@ class OptimizationControlRedirector:
                                                       
         if naturalCoefficient != 0:
             pNaturalCoefficient = naturalCoefficient    
-        
-        
+                
         '''
         ==========================================================
         Begin Primary Search Loop: Progressive Target Discovery
@@ -806,10 +805,8 @@ class OptimizationControlRedirector:
         if self.verbose: print "\n==Starting Iterative Search Size[%s] Iterations [%s->%s]==" %(searchNeighborhood,preStart,preStart+self.iterations)
         if self.verbose: print "Number of Targets [%s]" % len(targets)
         if self.verbose: print "Starting natural coefficient [%s]" %  (naturalCoefficient)
-        startTime = time()
             
         for i in range(preStart+1,preStart+self.iterations+1):
-                iTime = time()
                 
                 if self.verbose: print "\n=============Iteration [%s]===============" % i    
                 if self.verbose: print "Progressive Growth Parameter: [%s]" % naturalCoefficient
@@ -838,7 +835,8 @@ class OptimizationControlRedirector:
                 if self.verbose: print "\n=====================Optimizing Framework====================="
                 runTag = "%s_%s_%s_k%s_i%s" % (self.control,self.naturalObjectiveName,self.syntheticObjectiveName,searchNeighborhood,i)
                 pPredValue = ltPredV
-                (ltPredV,iObjective,iGeneObjective,ltSynthVal,checkPredVal,checkSynthVal) = self.redirectorModelOptimization(tmodel,model,controlNames,geneClusters,runTag)
+                iterSolverReport= False
+                (ltPredV,iObjective,iGeneObjective,ltSynthVal,checkPredVal,checkSynthVal) = self.redirectorModelOptimization(tmodel,model,controlNames,geneClusters,runTag,report=iterSolverReport)
                 
                 if abs(ltSynthVal- checkSynthVal) > max(abs(ltSynthVal *0.25),1.0):
                     print "Large model prediction inaccuracy"
@@ -859,6 +857,16 @@ class OptimizationControlRedirector:
                     finalPredictionValue = ltPredV
                     finalNaturalCoefficient = naturalCoefficient
                     maxEffect = effectValue
+                    
+                    ltReport = self.con.createReport(ltPredV,originalFluxNames,targets,geneClusters)
+                    
+                    try:
+                    #if True:
+                        print "Writing Optimization target Report"
+                        iteration = self.preStart + i
+                        self.writeAnnotatedTargets(iObjective, originalModel, annotationName = "bnumber", regex="[a-zA-Z0-9\(\)]+", iteration = iteration, oPrediction = oPredVal, nPrediction = ltPredV)
+                    except:
+                        print "failed to write report"
                                  
                 pEffectValue = effectValue
                 naturalCoefficient = newNaturalCoefficient
@@ -1019,9 +1027,11 @@ class OptimizationControlRedirector:
     
     def _annotateGenes(self,objective,model,annotationName,regex):
         result = objective
+        if model.annotation == None:
+            return objective
         if annotationName in model.annotation.keys():
                 annotationMap = model.annotation[annotationName]
-                gMap = annotationMap.getColumn("gene")
+                gMap = annotationMap.getColumn("gene symbol")
                 if annotationMap != None:
                     result = self._annotateMap(objective,gMap,regex)
         return result
@@ -1225,12 +1235,11 @@ class OptimizationControlRedirector:
             self.con.controlMin = 0
             if binary:
                 self.con.controlMax = 1.0
-            else:
+            else: 
                 self.con.controlMax = 0.0
             
             tmodel = self.reconstructControlModel(originalModel,targets,{})
             (predV,obj,iGeneObjective,ltSynthVal,checkPredVal,checkSynthVal) = self.redirectorModelOptimization(tmodel,originalModel,controlNames=targets,geneClusters=None,runTag='Toggle0_test',report=False)
-            #(predV,obj) = self.testOpt(tmodel, originalModel, targets)
             
             controlNames = controlMap.keys()            
             for controlName in controlNames:
@@ -1238,7 +1247,7 @@ class OptimizationControlRedirector:
                 testTag = prefix+controlName+"_boundary"
                 if self.verbose: print "\nConstructing optimization check [%s] %s => %s" % (name,controlName,controlValues)
                 tmodel = self.con.setControl(tmodel,prefix + "y__",[controlName],on = True, binary = binary)        
-                self.redirectorModelOptimization(tmodel,originalModel,controlNames=targets,geneClusters=None,runTag=testTag,report=False)
+                (predV,obj,iGeneObjective,ltSynthVal,checkPredVal,checkSynthVal) = self.redirectorModelOptimization(tmodel,originalModel,controlNames=targets,geneClusters=None,runTag=testTag,report=False)
                 tmodel = self.con.setControl(tmodel,prefix + "y__",[controlName],on = False, binary = binary)
                     
         self.con.controlMin = controlMin

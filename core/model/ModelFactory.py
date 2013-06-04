@@ -7,6 +7,7 @@ Factory for generating
  Control optimization models
 '''
 
+from core.model.LPSolver import LPSolver
 from core.do.FluxModel import FluxModel
 from core.model.LinearModel import LinearModel
 from core.reader.FlatFileParser import FlatFileParser, FluxModelFlatFileParser 
@@ -148,7 +149,7 @@ class ModelFactory:
             if mName != '':
                 lmParser = MetabolicNetworkParser()
                 modelConfig.reflect(mName,lmParser)
-                xFluxModel = lmParser.generateModel(mName)
+                #xFluxModel = lmParser.generateModel(mName)
                 
                 modelParser = FluxModelFlatFileParser()
                 modelParser.setWrapper("\'")
@@ -209,6 +210,45 @@ class ModelFactory:
         model.targets = targets
         
         return (fluxModel,model)
+    
+    def numericalRefactorModel(self,model,floor=1.0,minValue=1e-3,maxFactor=100,verbose=True):
+        '''
+        Method for numerically refactor the linear model
+        Currently only has floor option.
+        '''
+        columnNames = model.getColumnNames()
+        
+        for cName in columnNames:
+            if cName in model.getObjective().keys():
+                continue
+            
+            rMap = model.getColumnValueMap(cName)
+            rMin = abs(min(rMap.values(), key = lambda x:abs(x)))
+            factor = floor/rMin
+            
+            if factor > maxFactor: factor = maxFactor
+             
+            if rMin < floor:
+                #if verbose: print "original reaction: [%s]" % rMap    
+                if verbose: print "refactoring %s [%s]" % (cName,factor)
+                
+                for rName in rMap.keys():
+                    value = rMap[rName]
+                    if abs(value) < minValue:
+                        model.removeData(rName,cName)
+                    else:
+                        iValue = value * factor
+                        model.addData(rName,cName,iValue)
+                rMap = model.getColumnValueMap(cName)
+                #if verbose: print "final reaction [%s]" % rMap
+                    
+                #solver = LPSolver()
+                #oPredVal = solver.run(model=model)
+                #print "check production [%s]" % oPredVal["Biomass"]
+                #print "done"
+        
+        return model
+            
     
     def sortTags(self,tags,sep="_"):
         q = []
@@ -468,6 +508,13 @@ class ModelFactory:
         
         if self.verbose: print "Reactions: %s" % (len(modelMatrix.getColumnNames()))
         if self.verbose: print "Targets %s" % (len(modelMatrix.targets))
+        
+        #-----------------------------
+        # Adjust or refactor model
+        #-----------------------------
+        coefficentFloor = 1.0
+        if self.verbose: print "Refactoring coefficients of linear model to [%s]" % (coefficentFloor)
+        modelMatrix = self.numericalRefactorModel(modelMatrix, floor=coefficentFloor, verbose=True)
             
         #--------------------
         #Get Gene Mappings
@@ -483,6 +530,7 @@ class ModelFactory:
             rGeneMap = {}
             for target in modelMatrix.targets:
                 rGeneMap[target] = target
+
         
         #----------------------------
         # Reduce Model #! remove reduction functions: complex and don't seem to give much improvement.

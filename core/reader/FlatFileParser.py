@@ -641,8 +641,6 @@ class ObjectiveFlatFileParser( FlatFileParser ):
 
         return objective
 
-
-
 #===========================================================
 #==========FluxAnalysisFlatFileParser=======================
 #===========================================================
@@ -710,9 +708,6 @@ class FluxAnalysisFlatFileParser( FlatFileParser ):
         return ( reactions, objective, limit )
                 
         
-        
-        
-
 #============================================================
 #================FluxModelFlatFileParser=====================
 #============================================================
@@ -901,7 +896,6 @@ class  FluxModelFlatFileParser( FlatFileParser ):
         
         return fluxModel
 
-
     def parseMultipleAnalysis( self, rxnfile, metabolitefile, fluxlimitfiles, objectivefiles, analysisNames ):
         networkParser = MetabolicNetworkFlatFileParser()
         network = networkParser.parse( rxnfile, metabolitefile )
@@ -941,7 +935,6 @@ class  FluxModelFlatFileParser( FlatFileParser ):
         fluxModel = self.parseMultipleAnalyis( self, rxnfile, metabolitefile, newFluxLimitFileList, newObjectiveFileList )
         return fluxModel
 
-
 class AnnotationFlatFileParser( FlatFileParser ):
 
     def __init__( self, delimiter='\t', comment='#' ):
@@ -964,7 +957,6 @@ class AnnotationFlatFileParser( FlatFileParser ):
             
         self.closeFile()
         return result
-
 
 #=====================================
 #=============ParseError==============
