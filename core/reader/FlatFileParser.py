@@ -3,6 +3,8 @@
 @author: Graham Rockwell
 @organization: Church Lab Harvard Genetics
 @version: 03/04/2013
+
+--Rename to metabolic-model parser
 '''
 
 import string, sets, re

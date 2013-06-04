@@ -1,20 +1,23 @@
- #!/usr/bin/env python2.4
-
-#---------------------------------
-#Graham Rockwell
-#Church Group Havard Genetics
-#Last updated 8/28/2009
-#---------------------------------
+ #!/usr/bin/env python2.7
+'''
+@author: Graham Rockwell
+Church Group Havard Genetics
+Last updated 8/28/2009
+@summary:
+    User interface methods for optimization of recombination oligos
+    Method "auto": determines which methods to run given from given input parameters
+    Method "location": selected locations from genome sequence with replacement 
+    Method "oligo": uses input fasta file of oligos to find optimal location and generate primers
+    Method "sequence": take recombination oligo fasta file compares it to sequencing fasta file
+'''
 
 from core.reader.FlatFileParser import FlatFileParser
-from core.reader.SequenceReader import SequenceReader
-
-from core.util.Report import Report
-from core.writer.ReportWriter import ReportWriter
-
-from core.genetic.SequenceTools import SequenceTools, SequenceFactory, RecombinationOligoFactory,ControlRegionTools
 
 from core.util.Config import ReflectionConfig
+from core.util.Report import Report
+from core.util.ReportWriter import ReportWriter
+
+from core.genetic.SequenceTools import SequenceTools, SequenceFactory, RecombinationOligoFactory,ControlRegionTools
 
 from Bio import Entrez,SeqIO
 from Bio.SeqRecord import SeqRecord
@@ -22,15 +25,6 @@ from Bio.SeqRecord import SeqRecord
 from optparse import OptionParser
 import pickle, time
 
-
-'''
-    User interface methods for optimization of recombination oligos
-    Method "auto" determines which methods to run given from given input parameters
-    Method "location" selected locations from genome sequence with replacement 
-    Method "oligo" uses input fasta file of oligos to find optimal location and generate primers
-    Method "sequence" take recombination oligo fasta file compares it to sequencing fasta file
-    
-'''
 
 if __name__  == "__main__":
     parser = OptionParser()
