@@ -67,10 +67,10 @@ class SequenceTools:
         blastall -d database -i query -p blastn -o blastout
         '''
         
-        if not os.path.isfile(seqFile):
+        if not os.path.exists(os.path.expanduser(seqFile)):
             print "(ignore) %s file not found" %(seqFile)
         
-        if not os.path.isfile(blastDB):
+        if not os.path.exists(os.path.expanduser(blastDB+".nsq")):
             print "(ignore) %s file not found" % (blastDB)
             
         (resultHandle,errorHandle) = NCBIStandalone.blastall(blastExe,blastType,blastDB,seqFile)       
@@ -134,14 +134,6 @@ class SequenceTools:
         it does a full read of the result for the conversion to features.
         '''
         blastRecords = self.seqBlast( blastDB, blastExe, seqFile, blastType = "blastn", scoreMin = 1e-3, logFile = None)
-        
-        #! Other blast methods, using handles for parsing as generated approaches
-        #(resultHandle,errorHandle) = NCBIStandalone.blastall(blastExe,blastType,blastDB,seqFile,outfile="blast_output.temp")
-        #time.sleep(5)
-        #blastParser = NCBIStandalone.BlastParser()        
-        #blastHandle = open("blast_output.temp")
-        
-        #blastRecords = NCBIXML.parse(blastHandle)
         
         result = []
         index = 0
@@ -947,6 +939,7 @@ class RecombinationOligoFactory:
         
         logFile = open("oligoLog.txt","w")
         targetMap = {}
+        sRegions = []
         
         for r in records:
             id = r.id
@@ -1008,7 +1001,7 @@ class RecombinationOligoFactory:
             else:
                 s = r.seq[lowSearchBound:highSearchBound].reverse_complement()
                 sx = r.seq[start:end].reverse_complement()
-    
+            
             searchEnd = (end-start+searchSize+5)
             searchStart = searchSize + 5
             
@@ -1041,11 +1034,16 @@ class RecombinationOligoFactory:
             result.add(id,"fold score", foldScore) 
             result.add(id,"off center", adjust) 
             
+            #append to list of sequence regions
+            sRegion = r
+            sRegion.seq = sx
+            sRegions.append(sRegion)
+            
             index = index + 1
         
         logFile.close()
         
-        return (targetMap,result)
+        return (targetMap,result,sRegions)
     
     def _selectFeatures(self,featureList,start,end):
         result = []

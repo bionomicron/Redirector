@@ -148,7 +148,7 @@ if __name__  == "__main__":
     targetTag = "([^ACGTacgt]+.*[^ACGTacgt]+)"
     boundary = options.flankingSize
     #boundary = 45
-    searchSize = 50
+    searchSize = 200
     cutOff = (None,-13.0)
     primerSize = 20
     primerTm = 58
@@ -232,7 +232,19 @@ if __name__  == "__main__":
         blastedFeatures = seqTools.seqBlastToFeatures(blastDB, blastExe, targetFile, blastType = "blastn",scoreMin = 1e-5)
         if verbose: print "finished blasting locations"
         if verbose: print "generating recombination oligos"
-        (targetMap,report) = recFac.generateTargetingOligos(oligoRecords, blastedFeatures, tagRE = targetTag, boundary = boundary, searchSize = searchSize, cutOff = cutOff) 
+        (targetMap,report,seqRegions) = recFac.generateTargetingOligos(oligoRecords, blastedFeatures, tagRE = targetTag, boundary = boundary, searchSize = searchSize, cutOff = cutOff) 
+        
+        seqRegions = []
+        for (id,location) in targetMap.items():
+            low = location - 300
+            high = location + 300
+            iSeq = seqData[low:high]
+            isRecord = SeqRecord(iSeq,id=id)
+            seqRegions.append(isRecord)
+        
+        sRegionHandel = open("OligoSequenceRegions.fasta","w")
+        SeqIO.write(seqRegions,sRegionHandel,"fasta")
+        sRegionHandel.close()
         
         seqTools = SequenceTools()
         seqTools.verbose = verbose
