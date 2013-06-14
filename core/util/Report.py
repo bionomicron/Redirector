@@ -101,7 +101,6 @@ class Report:
         """
         return self.data.getRowKeys()
         
-            
     def returnRowNames(self):
         return self.getRowNames()
         
@@ -132,6 +131,23 @@ class Report:
                 result.append(value)
         return result
     
+    def getRow(self,name):
+        '''
+        @param name: name of column to return
+        @return: the values of column of report
+        @rtype: {string:string}
+        '''
+        result = {}
+        if name not in self.getRowNames():
+            return None
+        for columnName in self.getColumnNames():
+            value = self.data.getValue(name,columnName)
+            if value == None:
+                continue
+            else:
+                result[columnName] = value
+        return result
+    
     def getColumn(self,name):
         '''
         @param name: name of column to return
@@ -139,9 +155,9 @@ class Report:
         @rtype: {string:string}
         '''
         result = {}
-        if name not in self.returnColumnNames():
+        if name not in self.getColumnNames():
             return None
-        for rowName in self.returnRowNames():
+        for rowName in self.getRowNames():
             value = self.data.getValue(rowName,name)
             if value == None:
                 continue

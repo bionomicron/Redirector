@@ -13,8 +13,7 @@ on work from Sriram's further based on Billy's code
 '''
 
 import os, re, math, subprocess
-import time
-import copy
+import time, copy
 
 from Bio import Entrez,SeqIO
 from Bio.Seq import Seq
@@ -77,14 +76,6 @@ class SequenceTools:
         time.sleep(5)
         blastRecords = NCBIXML.parse(resultHandle)
 
-        #---Old blast methods---
-        #(resultHandle,errorHandle) = NCBIStandalone.blastall(blastExe,blastType,blastDB,seqFile,outfile="blast_output.temp")
-        #time.sleep(5)
-        #blastParser = NCBIStandalone.BlastParser()
-        #blastHandle = open("blast_output.temp")
-        #blastRecords = NCBIXML.parse(blastHandle)
-        #blastHandle.close()
-        
         blastRecords = list(blastRecords)
         resultHandle.close()
         errorHandle.close()
@@ -124,8 +115,6 @@ class SequenceTools:
             
         return result
             
-            
-    
     def seqBlastToFeatures(self, blastDB, blastExe, seqFile, blastType = "blastn",scoreMin = 1e-3, logFile = None):
         '''
         Blast sequence file against blast database 
@@ -157,10 +146,6 @@ class SequenceTools:
                         recordFeatures.append(feature)
             result.append(recordFeatures)
             index = index + 1
-        
-        #resultHandle.close()
-        #errorHandle.close()
-        #blastHandle.close()
             
         return result
 
@@ -178,15 +163,17 @@ class SequenceTools:
          this may be a result of molecular levels that are not accounted for in those
          calculators.
         
-        @type seqobj: string or Seq object
+        @type seqobj: String, Seq object, or SeqRecord
+        @var seqObj:  The sequence for which the TM is being produced
         @type C_primer: float
         @type C_mg: float
         @type C_MonovalentIon: float
         @rtype: float
+        @return: Returns the melting temperature (TM) for the input sequence 
         """
         
         if isinstance(seqobj,SeqRecord):
-            seq = seqrec.seq.tostring().upper()
+            seq = seqobj.seq.tostring().upper()
         elif isinstance(seqobj,Seq):
             seq = seqobj.tostring().upper()
         elif isinstance(seqobj,str):
@@ -204,8 +191,6 @@ class SequenceTools:
         percentage_DMSO = percentage_DMSO/100.0
         #Some constants
         R = 1.987
-        deltaH = dict()
-        deltaS = dict()
         deltaH =  {"AA": -7.9,  "TT": -7.9, "AT": float((-1)*7.2), "TA": -7.2, "CA": -8.5, "TG": -8.5, "GT": -8.4, "AC": -8.4,"CT": -7.8, "AG": -7.8, "GA": -8.2, "TC": -8.2,"CG": -10.6,"GC": -9.8, "GG": -8.0, "CC": -8.0, "A": 2.3, "T": 2.3, "G": 0.1, "C": 0.1}
         deltaS = { "AA": -22.2, "TT": -22.2, "AT": -20.4, "TA": -21.3, "CA": -22.7, "TG": -22.7, "GT": -22.4, "AC": -22.4, "CT": -21.0, "AG": -21.0, "GA": -22.0, "TC": -22.0,"CG": -27.2, "GC": -24.4, "GG": -19.9, "CC":-19.9, "A": 4.1, "T": 4.1, "G": -2.8, "C": -2.8}
         
@@ -339,7 +324,7 @@ class FeatureTools:
         Also does not check if there are double overlaps between genes... though don't think so for E. coli
         '''
         startLocations=[]
-     #    skips first gene, assumes no overlap from other side of circular dna... OK for E. coli for now
+        #skips first gene, assumes no overlap from other side of circular dna... OK for E. coli for now
         for i in range(0,len(featureList)):
             #find upstream homology regions
             startLocations.append(featureList[i].location.start.position)
@@ -410,7 +395,7 @@ class FeatureTools:
         '''
         startLocations=[]
         endLocations=[]
-     #skips first gene, assumes no overlap from other side of circular dna... OK for E. coli for now
+        #skips first gene, assumes no overlap from other side of circular dna... OK for E. coli for now
         for i in range(0,len(featureList)):
             #find upstream homology regions
             startLocations.append(featureList[i].location.start.position)
@@ -425,8 +410,8 @@ class FeatureTools:
                 print featureList[i-1]
                 print str(i) + "weirdo"
                 print featureList[i]
+                
     
-
 class SequenceFactory:
     '''
     Factory 
@@ -437,21 +422,22 @@ class SequenceFactory:
     
     def __init__(self,dataDirectory=''):
         self.dataDirectory = dataDirectory
-        self.verbose = False
+        self.genbankID = ''
         self.email = "automated"
-        self.defaultGenbank = "gi_49175990.gbk"
-        self.defaultGenbankID = "49175990"
+        self.verbose = False
         
+    def _genbankFileName(self,genbankID):
+        return self.dataDirectory + "gi_" + genbankID + ".gbk"
     
-    def downloadGenBank(self,genbankID="49175990",filename = None):
+    def downloadGenBank(self,genbankID=None,filename = None):
         '''
-        Downloads GenBank file given an genbank ID and an email address to give NCBI
+        Downloads GenBank file given an GenBank ID and an email address to give NCBI
         Defaults to GenBank record of E. coli K12 MG1655
         '''
+        if genbankID == None:
+            genbankID = self.genbankID
         if filename == None:
             filename = self.dataDirectory + "gi_" + genbankID + ".gbk"
-        if genbankID == None:
-            genbankID = self.defaultGenbankID
         
         if not os.path.isfile(filename):
             if self.verbose: print "Downloading..."
@@ -463,7 +449,7 @@ class SequenceFactory:
             if self.verbose: print "Saved"
             return filename
         else:
-            if self.verbose: print "Retreving GenBank record from local disk"
+            if self.verbose: print "Getting GenBank record from local disk"
             return filename
     
 
@@ -474,12 +460,19 @@ class SequenceFactory:
         '''
         
         if filename == None:
-            filename = self.defaultGenbank
+            filename = self.dataDirectory + "gi_" + self.genbankID + ".gbk"
             
         if self.verbose: print "Parsing Whole Genome..."
         record = SeqIO.read(open(filename,"rU"), "genbank")
         if self.verbose: print "Parsing Genome Complete"
         return record
+    
+    def getGenBankSequence(self,genbankID=None,filename=None):
+        genbankFile = self.downloadGenBank(genbankID, filename)
+        if not os.path.exists(genbankFile):
+            time.sleep(5)
+        genbankSequence = self.parseGenBank(genbankFile)
+        return genbankSequence
     
 
     def printFeature(self,feature):
@@ -914,6 +907,47 @@ class RecombinationOligoFactory:
             (adjust,foldScore,bestSeq) = ("na","na",sx)
         
         return (adjust,foldScore,bestSeq)
+    
+    def parseAlignments(self,records,featureLocations):
+        result = Report()
+        index = 0
+        
+        logFile = open("oligoLog.txt","w")
+        targetMap = {}
+        
+        for r in records:
+            id = r.id
+
+            features = featureLocations[index]
+            hits =  len(features)
+            genomicStart = features[0].location.start.position
+            genomicEnd = features[0].location.end.position
+            genomicStrand = features[0].strand
+            laggingComplementStrand = self.strandChooser(features[0])
+            
+            if "alignment" in features[0].qualifiers.keys():
+                aMatch = features[0].qualifiers["alignment"]
+            else: 
+                aMatch = ''
+            
+            targetMap[id] = (genomicStart + genomicEnd)/2
+            
+            logFile.write(id+"\n")
+            logFile.write(aMatch+"\n")
+            #if self.verbose: print aMatch
+            
+            s = str(r.seq)
+            originalString = s
+            
+            result.add(id,"original", originalString) 
+            result.add(id,"hits", hits) 
+            result.add(id,"genomic_start", genomicStart) 
+            result.add(id,"genomic_end", genomicEnd) 
+            result.add(id,"genomic_strand", genomicStrand)
+            result.add(id,"match", aMatch)
+        
+        return result
+        
         
     def generateTargetingOligos(self, records, featureLocations, tagRE, boundary, searchSize, cutOff):
         '''

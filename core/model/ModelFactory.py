@@ -7,10 +7,9 @@ Factory for generating
  Control optimization models
 '''
 
-from core.model.LPSolver import LPSolver
-from core.do.FluxModel import FluxModel
 from core.model.LinearModel import LinearModel
-from core.reader.FlatFileParser import FlatFileParser, FluxModelFlatFileParser 
+from core.reader.FlatFileParser import FlatFileParser
+from core.reader.FluxModelParser import FluxModelFlatFileParser 
 from core.reader.LinearModelParser import MetabolicNetworkParser
 from core.util.Config import ReflectionConfig
 from core.util.Report import Report

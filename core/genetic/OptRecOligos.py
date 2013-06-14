@@ -1,7 +1,8 @@
  #!/usr/bin/env python2.7
+
 '''
 @author: Graham Rockwell
-Church Group Havard Genetics
+Church Group Harvard Genetics
 Last updated 8/28/2009
 @summary:
     User interface methods for optimization of recombination oligos
@@ -9,10 +10,13 @@ Last updated 8/28/2009
     Method "location": selected locations from genome sequence with replacement 
     Method "oligo": uses input fasta file of oligos to find optimal location and generate primers
     Method "sequence": take recombination oligo fasta file compares it to sequencing fasta file
+    
+    Currently this method is very crufty and fairly disorganized ==> Need serious clean up
+    
+    Note use configurations for particular genomes etc to condense command line inputs.
 '''
 
 from core.reader.FlatFileParser import FlatFileParser
-
 from core.util.Config import ReflectionConfig
 from core.util.Report import Report
 from core.util.ReportWriter import ReportWriter
@@ -21,10 +25,10 @@ from core.genetic.SequenceTools import SequenceTools, SequenceFactory, Recombina
 
 from Bio import Entrez,SeqIO
 from Bio.SeqRecord import SeqRecord
+from Bio.Seq import Seq
 
 from optparse import OptionParser
 import pickle, time
-
 
 if __name__  == "__main__":
     parser = OptionParser()
@@ -37,7 +41,7 @@ if __name__  == "__main__":
     
     parser.add_option("-c", "--configFile",
                       dest="config", 
-                      default="oligo_generation.config",
+                      default="sequence_analysis.config",
                       help="config file for oligo generation, check config for defaults",
                       metavar="FILE")
     
@@ -113,13 +117,12 @@ if __name__  == "__main__":
                       help="minimum folding energy of oligos", 
                       metavar="FILE")
                   
-    #parse oligos
+    #parse command line arguments
     (options,args) = parser.parse_args()
     configFileName = options.config
     configName = options.configName
-    #configName = "fatty acid targets"
-    
-    # Parse main config and reflect into options
+
+    # Parse main configuration and reflect into options
     config = ReflectionConfig()    
     config.readfp(open(configFileName))
     config.reflect(configName,options)
@@ -180,9 +183,7 @@ if __name__  == "__main__":
         conversionMap = {"geneID":"gene","f":int(1),"r":int(-1)}
         targetFeatures = seqFac.convertReportToFeatures(targetReport,conversionMap,"start","end","direction")
     
-        genomicSeqFileName = seqFac.downloadGenBank()
-        time.sleep(5)
-        gRecord = seqFac.parseGenBank(genomicSeqFileName)
+        gRecord = seqFac.getGenBankSequence(genbankID=None, filename=None)
         seqData = str(gRecord.seq).lower()
         
         oligoRecords = list()
@@ -217,9 +218,8 @@ if __name__  == "__main__":
         #Get genomic data for primers
         #--------------------------------
         if gRecord == None:
-            genomicSeqFileName = seqFac.downloadGenBank()
-            time.sleep(5)
-            gRecord = seqFac.parseGenBank(genomicSeqFileName)
+            config.reflect(configName, seqFac)
+            gRecord = seqFac.getGenBankSequence(genbankID=None,filename=None)
         seqData = gRecord.seq
     
         #---------------------------
@@ -250,6 +250,7 @@ if __name__  == "__main__":
         seqTools.verbose = verbose
         primerReport = seqTools.findPrimers(seqData, targetMap, boundary=primerDistance, oligoSize=primerSize, searchSize=60, targetTm=primerTm)
         report.extend(primerReport)
+        
         #----------------------------
         # Write Report
         #----------------------------
