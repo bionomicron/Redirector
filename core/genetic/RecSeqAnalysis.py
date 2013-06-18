@@ -18,9 +18,11 @@ from Bio.SeqRecord import SeqRecord
 from Bio.Seq import Seq
 
 from optparse import OptionParser
-import pickle, time
+import pickle, time, re
 
 def writeToLog(stringValue,logFileH,verbose=False):
+    if logFileH == None:
+        return None
     try:
         if verbose: print stringValue
         logFileH.write(stringValue+"\n")
@@ -35,7 +37,7 @@ def replaceSeqTarget(seq,newSeq,loc):
     result = prefix + newSeq + post
     return result
 
-def findTargets(targetReport,feature,minQuality=100,logFileName="Target_anlaysis_log.txt"):
+def findTargets(targetReport,feature,minQuality=100,logFile=None):
     start = feature.location.start.position
     end = feature.location.end.position
     locations = targetReport.getRowNames()
@@ -71,18 +73,16 @@ def findTargets(targetReport,feature,minQuality=100,logFileName="Target_anlaysis
     if dCount > 0:
         qualityValues.sort()
         
-        logFileH = open(logFileName,"w")
         s = "Feature [%s] (%s <-> %s) ===> %s" % (feature.id,start,end,qualityValues)
-        writeToLog(s, logFileH, True)
+        writeToLog(s, logFile, True)
         s = "%s [subject]" % (subjectSeq)
-        writeToLog(s, logFileH, True)
+        writeToLog(s, logFile, True)
         s = "%s [query]" % (querySeq)
-        writeToLog(s, logFileH, True)
+        writeToLog(s, logFile, True)
         s= "%s [vcf]" % (refSeq)
-        writeToLog(s, logFileH, True)
+        writeToLog(s, logFile, True)
         s = "%s [alt]" % (readSeq)
-        writeToLog(s, logFileH, True)
-        logFileH.close()
+        writeToLog(s, logFile, True)
     
     result["query"] = querySeq
     result["subject"] = subjectSeq
@@ -91,12 +91,12 @@ def findTargets(targetReport,feature,minQuality=100,logFileName="Target_anlaysis
     
     return result
 
-def annotateAlignment(targetMap,featuresArray,logFileName="log.txt"):
+def annotateAlignment(targetMap,featuresArray,logFile=None):
     result = {}
     for features in featuresArray:
         for feature in features:
             id = feature.id
-            targets = findTargets(targetMap, feature, minQuality= 100, logFileName = logFileName)
+            targets = findTargets(targetMap, feature, minQuality= 100, logFile = logFile)
             result[id] = targets
     
     return None
@@ -164,7 +164,13 @@ if __name__  == "__main__":
     blastExe = config.get(configName, "blastExe")
     readFile = options.recSeq
     targetFile = options.targetSeq
+    readRegx = 'Sample\.(.*)\.txt'
+    rregx = re.search(readRegx,readFile)
     
+    if  rregx != None:
+        readTag = rregx.group(1).replace(".","_")
+    else:
+        readTag = "read_analysis"
     
     seqTools = SequenceTools()
     seqTools.verbose = verbose
@@ -183,15 +189,15 @@ if __name__  == "__main__":
     targetRecords= SeqIO.parse(open(targetFile), "fasta")
     targetRecords = list(targetRecords)
 
-    print len(targetRecords)
-    for t in targetRecords:
-        #print t
-        pass
+    print "Processing [%s] records" % (len(targetRecords))
     
     if verbose: print "blasting sequences"
     blastedFeatures = seqTools.seqBlastToFeatures(blastDB, blastExe, targetFile, blastType = "blastn",scoreMin = 1e-5)
     
     if verbose: print "finished blasting locations"
-    alignmentReport = annotateAlignment(readRecord, blastedFeatures)
-        
+    readLogName = "read_log_%s.txt" % (readTag)
+    logFile = open(readLogName,"w")
+    alignmentReport = annotateAlignment(readRecord, blastedFeatures,logFile=logFile)
+    logFile.close()
+    
     print "Done"
