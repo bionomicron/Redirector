@@ -203,42 +203,71 @@ if __name__ == '__main__':
                       help="Tag for genome sequence data")
 
     parser.add_option("--r1", 
-                      dest="readTag", 
+                      dest="readTag1", 
                       default=None,
                       metavar="File",
                       help="readTag for first paired end read")
     
+    parser.add_option("--r2", 
+                      dest="readTag2", 
+                      default=None,
+                      metavar="File",
+                      help="readTag for first paired end read")
+
 
     (options,args) = parser.parse_args()
-    verbose = options.verbose
-    mode = options.mode
-    config = options.config
+    #verbose = options.verbose
+    #mode = options.mode
+    #config = options.config
+    
     workFolder = options.workFolder
-    #workFolder = "./seq_work/"
     refTag = options.genomicSeqTag
-    #refTag = "NC_000913"
-    #referenceGenomeTag = "20130604_fa_stargets_600bps_N10"
-    readTag = options.readTag
-    readTag = "Sample.TACTAG.R1"
+    readTag1 = options.readTag1
+    readTag2 = options.readTag2
+    
+    refTag = "NC_000913_2"
+    readTag1 = "Sample.GATCAG.R1"
+    readTag2 = "Sample.GATCAG.R2"
+    
     
     if not os.path.exists(workFolder):
         print "making work folder %s" % (workFolder)
         os.mkdir(workFolder)
     
+    readTag = readTag1
     drefTag = workFolder + refTag
-    dreadTag = workFolder + readTag
+    dreadTag = workFolder + readTag1
+    dreadTag1 = workFolder + readTag1
+    dreadTag2 = workFolder + readTag2
     
-    call = "bowtie2-build %s.fasta %s > bowtie2-build.log" % (refTag,drefTag)
-    subprocess.call(call,shell=True)
-    call = "bowtie2 -q -p 4 --mp 1,1- --end-to-end %s -U %s.fastq -S %s.sam > bowtie2-align.log" % (drefTag,readTag,dreadTag)
-    subprocess.call(call,shell=True)
+    print "building reference index"
+    call = "bowtie2-build %s %s > bowtie2_ref_index_log.txt" % (refTag,drefTag)
+    print call
+    #subprocess.call(call,shell=True)
+    
+    print "aligning sequences to reference"
+    call = "bowtie2 -q -p 4 --mp 1,1- --end-to-end %s -1 %s.fastq.gz -2 %s.fastq.gz -S %s.sam" % (drefTag,readTag1,readTag2,dreadTag1)
+    print call
+    #subprocess.call(call,shell=True)
+    
+    print "creating bam file"
     call = "samtools view -S -b %s.sam -o %s.bam" % (dreadTag,dreadTag)
-    subprocess.call(call,shell=True)
+    print call
+    #subprocess.call(call,shell=True)
+    
+    print "sorting bam file"
     call = "samtools sort %s.bam %s_s" % (dreadTag,dreadTag)
-    subprocess.call(call,shell=True)
+    print call
+    #subprocess.call(call,shell=True)
+    
+    print "indexing bam file"
     call = "samtools index %s_s.bam" % (dreadTag)
-    subprocess.call(call,shell=True)
-    call = "freebayes --fasta-reference %s.fasta %s_s.bam -v fb_out_%s_%s.txt" % (refTag,dreadTag,refTag,readTag)
+    print call
+    #subprocess.call(call,shell=True)
+    
+    print "finding VCF information"
+    call = "freebayes --fasta-reference %s %s_s.bam -v %s_%s.vcf" % (refTag,dreadTag,refTag,readTag)
+    print call
     subprocess.call(call,shell=True)
     
 
