@@ -3,8 +3,10 @@ Created on Jun 10, 2013
 
 @author: Graham Rockwell
 @summary:
-    Method for parsing and analyzing sequencing data from recombination engineered strains.
+    Method for working through sequencing of recombination strains.
+    Searching multiple file and running analysis in parallel.
 '''
+
 from core.reader.FlatFileParser import FlatFileParser
 
 from core.util.Config import ReflectionConfig
@@ -29,7 +31,6 @@ def writeToLog(stringValue,logFileH,verbose=False):
     except:
         print "failed to write to log file [%s]" % (logFileH)
     return None
-
 
 def replaceSeqTarget(seq,newSeq,loc):
     prefix = seq[:loc]
@@ -108,8 +109,26 @@ def parseVCFFile(fileName):
     keyTag = "POS"
     record = parser.parseToReport(fileName, keyTag, header, unique=True)
     
-    return record
+    return record    
+
+def alignVCF(targetFile, vcfFile, targetType = "fasta", verbose = True):
     
+    readRecord = parseVCFFile(vcfFile)
+    
+    targetRecords= SeqIO.parse(open(targetFile), targetType)
+    targetRecords = list(targetRecords)
+
+    if verbose: print "Processing [%s] records" % (len(targetRecords))
+    
+    if verbose: print "blasting sequences"
+    blastedFeatures = seqTools.seqBlastToFeatures(blastDB, blastExe, targetFile, blastType = "blastn",scoreMin = 1e-5)
+    
+    if verbose: print "finished blasting locations"
+    readLogName = "read_log_%s.txt" % (readTag)
+    logFile = open(readLogName,"w")
+    alignmentReport = annotateAlignment(readRecord, blastedFeatures,logFile=logFile)
+    logFile.close()
+
 
 if __name__  == "__main__":
     parser = OptionParser()
@@ -167,31 +186,23 @@ if __name__  == "__main__":
     readRegx = 'Sample\.(.*)\.txt'
     rregx = re.search(readRegx,readFile)
     
+    #temporary debugging variables
+    
     if  rregx != None:
         readTag = rregx.group(1).replace(".","_")
     else:
         readTag = "read_analysis"
     
-    seqTools = SequenceTools()
-    seqTools.verbose = verbose
-    
-    seqFac = SequenceFactory()
-    config.reflect(configName,seqFac)
-    
-    recFac = RecombinationOligoFactory()
-    recFac.verbose = verbose
-    
-    #Parse data files
-    #gRecord = seqFac.getGenBankSequence(genbankID=None, filename=None)
-    #seqData = str(gRecord.seq).lower()
-    
     readRecord = parseVCFFile(readFile)
+    
     targetRecords= SeqIO.parse(open(targetFile), "fasta")
     targetRecords = list(targetRecords)
 
     print "Processing [%s] records" % (len(targetRecords))
     
     if verbose: print "blasting sequences"
+    seqTools = SequenceTools()
+    seqTools.verbose = verbose
     blastedFeatures = seqTools.seqBlastToFeatures(blastDB, blastExe, targetFile, blastType = "blastn",scoreMin = 1e-5)
     
     if verbose: print "finished blasting locations"

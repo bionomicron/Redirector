@@ -24,16 +24,179 @@ from Bio.Blast.Applications import BlastallCommandline
 
 from core.util.Report import Report
 
+class BlastTools:
+    '''
+    Tools for interfacing more easily with biopython blast tools
+    '''
+    
+    def __init__(self):
+        self.verbose = False
+        self.blastExe = ''
+        self.blastDB = ''
+        
+    
+    def seqBlast(self, blastDB, blastExe, seqFile, blastType = "blastn", scoreMin = 1e-3, logFile = None):
+        '''
+        command line blast
+        blastall -d database -i query -p blastn -o blastout
+        '''
+        
+        if not os.path.exists(os.path.expanduser(seqFile)):
+            print "(ignore) %s file not found" %(seqFile)
+        
+        if not os.path.exists(os.path.expanduser(blastDB+".nsq")):
+            print "(ignore) %s file not found" % (blastDB)
+            
+        (resultHandle,errorHandle) = NCBIStandalone.blastall(blastExe,blastType,blastDB,seqFile)       
+        time.sleep(5)
+        blastRecords = NCBIXML.parse(resultHandle)
+
+        blastRecords = list(blastRecords)
+        resultHandle.close()
+        errorHandle.close()
+
+        return blastRecords
+    
+    def blastSelection(self, blastRecords, start=float("-inf"), end=float("inf"), include=True, scoreMin=1e-3):
+        '''
+         Convert blast records from within region into list of alignments
+        '''
+        
+        result = []
+        iBlastRecords = copy.deepcopy(blastRecords)
+        for r in iBlastRecords:
+            ialignments = []
+            for alignment in r.alignments:
+                ihsps = []
+                
+                for hsp in alignment.hsps:
+
+                    if hsp.expect < scoreMin:
+                        
+                        istart = hsp.sbjct_start
+                        iend = hsp.sbjct_end
+                        
+                        if start<istart and iend<end:
+                            ihsps.append(hsp)
+                        elif include and (istart < end and start < iend):
+                            ihsps.append(hsp)
+                            
+                if len(ihsps) > 0:
+                    alignment.hsps=ihsps
+                    ialignments.append(alignment)
+                    
+            r.alignments = ialignments
+            result.append(r)
+            
+        return result
+            
+    def seqBlastToFeatures(self, blastDB, blastExe, seqFile, blastType = "blastn",scoreMin = 1e-3, logFile = None):
+        '''
+        Blast sequence file against blast database 
+        parse files into records.
+        This function may not work as well on very large blast comparisons because 
+        it does a full read of the result for the conversion to features.
+        '''
+        print ">blast %s %s %s %s" % (blastDB,blastExe,seqFile,blastType) 
+        blastRecords = self.seqBlast( blastDB, blastExe, seqFile, blastType = "blastn", scoreMin = 1e-3, logFile = None)
+        
+        result = []
+        index = 0
+        for r in blastRecords:
+            recordFeatures = []
+            for alignment in r.alignments:
+                name = alignment.title
+                query = r.query
+                for hsp in alignment.hsps:
+                    if hsp.expect < scoreMin:
+                        (ts,ss) = hsp.frame
+                        strand = ss
+                        start = hsp.sbjct_start
+                        end = hsp.sbjct_end
+                        location = FeatureLocation(start,end)
+                        feature = SeqFeature(id=query,location=location,strand=strand)
+                        aMatch = hsp.query + "\n" + hsp.match + "\n" + hsp.sbjct
+                        feature.qualifiers["query"] = hsp.query
+                        feature.qualifiers["subject"] = hsp.sbjct
+                        feature.qualifiers["alignment"] = aMatch
+                        recordFeatures.append(feature)
+            result.append(recordFeatures)
+            index = index + 1
+            
+        return result
+    
+    def matchTargetMap(self,targetMap,featureArray):
+        result = {}
+        tFeatures = []
+        for features in featureArray:
+            tFeatures.extend(features)
+        mFeatures = list(tFeatures)
+        
+        for (id,(start,end,location)) in targetMap.items():
+            result[id] = 0
+            
+            f = lambda x,y: x.location.start.position <= float(y) <= x.location.end.position
+            g = lambda x: f(x,location)
+            
+            a = lambda x: start <= x.location.start.position <= end
+            b = lambda x: start <= x.location.end.position <= end
+            c = lambda x: g(x) | a(x) | b(x)
+            
+            h = lambda x: not(c(x))
+            
+            matches = filter(c,tFeatures)
+            mFeatures = filter(h,mFeatures)
+            count = len(matches)
+            mcount = len(mFeatures)
+            exMFeatures = mFeatures[1:100]
+            result[id] = result[id] + count
+            
+        return result
+        
+
+    def findTargets(self, targetReport,feature,minQuality=100,logFile=None):
+        # Temp = Remove
+        start = feature.location.start.position
+        end = feature.location.end.position
+        locations = targetReport.getRowNames()
+        matches = filter(lambda x: start<=float(x)<=end,locations)
+        
+        return None
+
+    def blastAlignSequences(self, targetMap, seqFile, readType="fasta"):
+        '''
+        @var targetMap: [ID (string):location (float)]
+        @var seqFile: String 
+        @seqFile: File of sequence data
+        @var readType: String
+        @readType: sequence data type: fasta, fastq,
+        '''
+        
+        records= SeqIO.parse(open(seqFile), readType)
+        records = list(records)
+
+        if self.verbose: print "Using blast to align [%s] records" % (len(records))
+    
+        if self.verbose: print "blasting sequences"
+        blastedFeatures = self.seqBlastToFeatures(self.blastDB, self.blastExe, seqFile, blastType = "blastn", scoreMin = 1e-5)
+        
+        targetCount = self.matchTargetMap(targetMap, blastedFeatures)
+        print targetCount    
+        
+        return targetCount
+
+
+
 class SequenceTools:
     '''
-    Group of tools for finding sequence properties and generally usefull information
+    Group of tools for finding sequence properties and generally useful information
     
     Functions:
     * Calculate secondary structure energy for sequence
     * Blast sequence and return record list
     * Find oligoTM
     * Optimize a group of oligos for a target TM
-    * Generate a list of primers optimzied for a TM, optimized for boundary distance.
+    * Generate a list of primers optimized for a TM, optimized for boundary distance.
     
     Dependencies
     * blast

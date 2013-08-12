@@ -1,19 +1,244 @@
-"""
-Initial analysis scripts.
-"""
+'''
+Created on Aug 11, 2013
+
+@author: Graham Rockwell
+@summary:
+    Objects and methods for working analysis of sequencing data.
+    Particular tools for analysis of recombination strains.
+'''
+
+from core.util.Config import ReflectionConfig
+from core.reader.FlatFileParser import FlatFileParser 
+from core.genetic.SequenceTools import BlastTools
+from core.util.Report import Report
+from core.util.ReportWriter import ReportWriter
+
+from Bio.Seq import Seq
+from Bio import Entrez,SeqIO
+from Bio.SeqRecord import SeqRecord
 
 import os,re
 import subprocess
 from optparse import OptionParser
+import difflib
 
-class BowTieTools:
+def parseSampleCode(name1,name2,regex='.*_([ATCG]+)_.*',tag="Sample_%s"):
+    difference = difflib.SequenceMatcher()
+    
+    difference.set_seqs(name1, name2)
+    match = difference.get_matching_blocks()
+    if len(match) != 0:
+        m = match[0]
+        idTag = name1[m[0]:m[0]+m[2]]
+    if idTag == '':
+        idTag = name1
+    
+    match = re.match(regex,idTag)
+    if match == None:
+        print "No match on regex [%s]" %idTag
+        return idTag
+    
+    rtag = match.group(1)
+    result = tag % rtag
+    return result
+    
+
+def parseRecOligoFile(filename):
+    parser = FlatFileParser(delimiter='\t', comment='##', emptyField='NA')
+    header={"Row Names":"Row Names", "original":"original", "hits":"hits", "genomic_start":"genomic_start", "genomic_end":"genomic_end", "genomic_strand":"genomic_strand","sequencing location":"sequencing location"}
+    keyTag = "Row Names"
+    record = parser.parseToReport(filename, keyTag, header, unique=True)
+    
+    return record
+
+def parseVCFFile(fileName):
+    parser = FlatFileParser(delimiter='\t', comment='##', emptyField='NA')
+    header={"#CHROM":"CHROM","POS":"POS","ID":"ID","REF":"REF","ALT":"ALT","QUAL":"QUAL","FILTER":"FILTER","INFO":"INFO","FORMAT":"FORMAT","unknown":"unknown"}
+    keyTag = "POS"
+    record = parser.parseToReport(fileName, keyTag, header, unique=True)
+    
+    return record
+
+class SeqReadTools:
     
     def __init__(self):
         # Location of this script. We may find other paths relative to this.
-        PWD = os.path.dirname(os.path.realpath(__file__ ))
+        self.verbose = False
+        self.PWD = os.path.dirname(os.path.realpath(__file__ ))
+        self.workingDir = "./"
+        self.refGenomeDir = "./"
+        self.refGenomeTag = ""
+        
+    def samProcessRead(self,r1,r2,idTag = None):
+        difference = difflib.SequenceMatcher()
+        
+        if not os.path.exists(workFolder):
+            if self.verbose: print "making work folder %s" % (workFolder)
+            os.mkdir(workFolder)
+    
+        if idTag == None:
+            difference.set_seqs(r1, r2)
+            match = difference.get_matching_blocks()
+            if len(match) != 0:
+                m = match[0]
+                idTag = r1[m[0]:m[0]+m[2]]
+            if idTag == '':
+                idTag = readTag1
+            
+        drefTag = self.refGenomeDir + self.refGenomeTag
+        dIdTag = self.workingDir + idTag
+        
+        if not os.path.exists("%s.1.bt2" % drefTag):
+            print "building reference index"
+            call = "bowtie2-build %s %s > bowtie2_ref_index_log.txt" % (drefTag,drefTag)
+            if self.verbose: print "executing command: [%s]" % call
+            subprocess.call(call,shell=True)
+        else:
+            if self.verbose: print "building reference index found %s" % (drefTag)
+        
+        if self.verbose: print "aligning sequences to reference"
+        call = "bowtie2 -q -p 4 -k 3 --local %s -1 %s -2 %s -S %s.sam" % (drefTag,r1,r2,dIdTag)
+        if self.verbose: print "executing command: [%s]" % call
+        subprocess.call(call,shell=True)
+        
+        if self.verbose: print "creating bam file"
+        call = "samtools view -S -b %s.sam -o %s.bam" % (dIdTag,dIdTag)
+        if self.verbose: print "executing command: [%s]" % call
+        subprocess.call(call,shell=True)
+        
+        if self.verbose: print "sorting bam file"
+        call = "samtools sort %s.bam %s_s" % (dIdTag,dIdTag)
+        if self.verbose: print "executing command: [%s]" % call
+        subprocess.call(call,shell=True)
+        
+        if self.verbose: print "indexing bam file"
+        call = "samtools index %s_s.bam" % (dIdTag)
+        if self.verbose: print "executing command: [%s]" % call
+        subprocess.call(call,shell=True)
+        
+        resultFile = "%s_s.bam" % (dIdTag)
+        
+        return (idTag,dIdTag,resultFile)
+    
+    def vcfProcess(self,bamFile,idTag):
+        drefTag = self.refGenomeDir + self.refGenomeTag
+        
+        if self.verbose: print "processing vcf file"
+        call = "freebayes --fasta-reference %s %s -v %s.vcf" % (drefTag,bamFile,idTag)
+        if self.verbose: print "executing command: [%s]" % call
+        subprocess.call(call,shell=True)
+        
+        resultFile = "%s.vcf" % idTag
+        
+        return resultFile
 
-        # Main root of data.
-        DATA_ROOT = '/home/nick/Data/cccb.dfci.harvard.edu/frd/Nicholas_Guido_C23YAACXX/demux'
+class ProcessVCF:
+    
+    def __init__(self):
+        self.blastTools = BlastTools()
+        
+    def writeToLog(self,stringValue,logFileH,verbose=False):
+        if logFileH == None:
+            return None
+        try:
+            if verbose: print stringValue
+            logFileH.write(stringValue+"\n")
+        except:
+            print "failed to write to log file [%s]" % (logFileH)
+        return None
+
+    def replaceSeqTarget(self,seq,newSeq,loc):
+        prefix = seq[:loc]
+        post = seq[loc+len(newSeq):]
+        result = prefix + newSeq + post
+        return result
+
+    def findTargets(self,targetReport,feature,minQuality=10,logFile=None):
+        start = feature.location.start.position
+        end = feature.location.end.position
+        locations = targetReport.getRowNames()
+        matches = filter(lambda x: start<=float(x)<=end,locations)
+        
+        querySeq = feature.qualifiers["query"]
+        subjectSeq = feature.qualifiers["subject"]
+        refSeq = Seq("_"*len(subjectSeq))
+        readSeq = Seq("_"*len(subjectSeq))
+        qualityValues = []
+        
+        print "Feature [%s] => Matches [%s]" %(feature.id,len(matches))
+        dCount = 0    
+        for loc in matches:
+            floc = float(loc)
+            seqStart = int(floc-start)
+            
+            target = targetReport.getRow(loc)
+            ref = target["REF"]
+            alts = target["ALT"].split(",")
+            quality = target["QUAL"]
+            
+            if float(quality) < minQuality:
+                print "(failed) Feature [%s] (%s <-> %s) ===> %s" % (feature.id,start,end,qualityValues)
+            else:
+                dCount += 1
+            qualityValues.append([seqStart,quality])
+            
+            refSeq = self.replaceSeqTarget(refSeq,ref,seqStart)
+            for alt in alts:
+                readSeq = self.replaceSeqTarget(readSeq,alt,seqStart)
+        
+        result = {}
+        if dCount > 0:
+            qualityValues.sort()
+            
+            s = "Feature [%s] (%s <-> %s) ===> %s" % (feature.id,start,end,qualityValues)
+            self.writeToLog(s, logFile, True)
+            s = "%s [subject]" % (subjectSeq)
+            self.writeToLog(s, logFile, True)
+            s = "%s [query]" % (querySeq)
+            self.writeToLog(s, logFile, True)
+            s= "%s [vcf]" % (refSeq)
+            self.writeToLog(s, logFile, True)
+            s = "%s [alt]" % (readSeq)
+            self.writeToLog(s, logFile, True)
+        
+        result["query"] = querySeq
+        result["subject"] = subjectSeq
+        result["refSeq"] = refSeq
+        result["alt-read"] = readSeq
+        
+        return result
+
+    def annotateAlignment(self,targetMap,featuresArray,logFile=None):
+        result = {}
+        report = Report()
+        
+        for features in featuresArray:
+            for feature in features:
+                id = feature.id
+                targets = self.findTargets(targetMap, feature, minQuality= 10, logFile = logFile)
+                result[id] = targets
+        return result
+
+    def alignVCF(self,targetFile,vcfFile,idTag):
+        readRecord = parseVCFFile(vcfFile)
+    
+        targetRecords= SeqIO.parse(open(targetFile), "fasta")
+        targetRecords = list(targetRecords)
+    
+        print "Processing [%s] records" % (len(targetRecords))
+        
+        if verbose: print "blasting sequences"
+        
+        self.blastTools.verbose = verbose
+        blastedFeatures = self.blastTools.seqBlastToFeatures(blastDB, blastExe, targetFile, blastType = "blastn",scoreMin = 1e-5)
+        
+        if verbose: print "finished blasting locations"
+        readLogName = "read_log_%s.txt" % (idTag)
+        logFile = open(readLogName,"w")
+        alignmentReport = self.annotateAlignment(readRecord, blastedFeatures,logFile=logFile)
+        logFile.close()
+        
+        return alignmentReport
         
         
 def filterReadFile(fileName,output,headerRegx,dataRegx):
@@ -37,129 +262,6 @@ def filterReadFile(fileName,output,headerRegx,dataRegx):
             
     return True    
 
-# Location of this script. We may find other paths relative to this.
-PWD = os.path.dirname(os.path.realpath(__file__ ))
-
-# Main root of data.
-DATA_ROOT = '/home/nick/Data/cccb.dfci.harvard.edu/frd/Nicholas_Guido_C23YAACXX/demux'
-
-# Root of where to put output.
-OUTPUT_ROOT = os.path.join(PWD, 'data/output')
-
-# Illumina fastq files.
-# NOTE: We assume we are running on gmc.ant.
-FASTQ_ROOT = ('/home/nick/Data/cccb.dfci.harvard.edu/frd/Nicholas_Guido_C23YAACXX/demux')
-
-FASTQ_S1 = 'Sample.ACAGTG.R1.fastq.gz'
-FASTQ_S2 = 'Sample.ACAGTG.R2.fastq.gz'
-#FASTQ_S3 = 'GEN009334_S3_L001_R1_001.fastq.gz'
-#FASTQ_S4 = 'GEN009335_S4_L001_R1_001.fastq.gz'
-#FASTQ_S5 = 'GEN009336_S5_L001_R1_001.fastq.gz'
-#FASTQ_UNDETERMINED = 'Undetermined_S0_L001_R1_001.fastq.gz'
-
-ALL_FASTQ = [
-    (FASTQ_S1,FASTQ_S2),
-#    FASTQ_S3,
-#    FASTQ_S4,
-#    FASTQ_S5,
-#    FASTQ_UNDETERMINED
-]
-
-
-def run(reference_seqs, analysis_output_dir):
-    # Create the bowtie2 index for the reference genome if hasn't been
-    # created yet. We check for the existence of a particular file.
-    bowtie2_index_test_file = os.path.splitext(reference_seqs)[0] + '.1.bt2'
-    if not os.path.exists(bowtie2_index_test_file):
-        bowtie2_build_index(reference_seqs)
-
-    # Create the output dir if it doesn't exist.
-    if not os.path.exists(analysis_output_dir):
-        os.mkdir(analysis_output_dir)
-
-    # Run bowtie2 with a guess at the best parameters and bucket the
-    # results.
-    for fastq_filename_list in ALL_FASTQ:
-        current_fastq1 = os.path.join(FASTQ_ROOT, fastq_filename_list[0])
-	current_fastq2 = os.path.join(FASTQ_ROOT, fastq_filename_list[1])
-        output_sam_filename = os.path.splitext(os.path.splitext(
-                fastq_filename_list[0])[0])[0] + '.bowtie2_align.sam'
-        output_sam_path = os.path.join(analysis_output_dir, output_sam_filename)
-        align_with_bowtie2(reference_seqs, current_fastq1, current_fastq2, output_sam_path)
-
-        # Bucket the results.
-        print '...Bucketing ' + os.path.split(output_sam_path)[1]
-        bucket_alignments(output_sam_path)
-
-    # 3. Possibly tweak the parameters to figure out if there is a better solution.
-
-
-###############################################################################
-# Bowtie2 Indexing
-###############################################################################
-
-def bowtie2_build_index(ref_genome_location):
-    """Build the index for bowtie2."""
-    index_prefix = _get_bowtie2_index_prefix(ref_genome_location)
-
-    # Create the bowtie2 index.
-    subprocess.check_call([
-        'bowtie2-build',
-        ref_genome_location,
-        index_prefix
-    ])
-
-
-def _get_bowtie2_index_prefix(ref_genome_location):
-    return os.path.splitext(ref_genome_location)[0]
-
-
-###############################################################################
-# Bowtie2 Alignment
-###############################################################################
-
-def align_with_bowtie2(ref_fasta, input_reads_1_fq, input_reads_2_fq, output_sam):
-    """
-	Perform alignment using bowtie2.
-    """
-    index_prefix = _get_bowtie2_index_prefix(ref_fasta)
-
-    stderr_log_path = output_sam + '.log'
-
-    with open(output_sam, 'w') as output_fh:
-        with open(stderr_log_path, 'w') as stderr_log_fh:
-            THREADS = '4'
-            args = [
-                'bowtie2',
-                '--local',
-                '--fast-local',
-                '-q',
-                '-p', THREADS,
-                #'--phred33',
-                #'-k', '3', # Search for multiple distinct alignments
-                index_prefix,
-                '-1', input_reads_1_fq,
-		'-2', input_reads_2_fq,
-            ]
-            subprocess.call(args, stdout=output_fh, stderr=stderr_log_fh)
-
-
-###############################################################################
-# Analyzing alignments: bucketing, etc.
-###############################################################################
-
-def bucket_alignments(sam_file_path):
-    """
-	Sort the alignments into buckets according to the genomes they aligned against.
-    """
-    args = "grep -v '^@' " + sam_file_path + ' | cut -f 3 | sort | uniq -c'
-
-    buckets_filename = sam_file_path + '.buckets'
-
-    with open(buckets_filename, 'w') as fh:
-        subprocess.call(args, shell=True, stdout=fh)
-
-from optparse import OptionParser
 
 if __name__ == '__main__':
     '''
@@ -179,18 +281,24 @@ if __name__ == '__main__':
                       help="set verbose mode")
     
     parser.add_option("-c","--config", 
-                      dest="configFile",
-                      default = "seq_builder.config",
+                      dest="config",
+                      default = "sequence_analysis.config",
                       help="name of sequencing analysis configuration file", 
                       metavar="FILE")
     
-    parser.add_option("-m", "--Mode", 
-                      dest="mode", 
-                      default=None,
-                      metavar="String",
-                      help="Sequence Analysis Mode (consensus,report)")
+    parser.add_option("-n", "--configName", 
+                      dest="configName", 
+                      default="default",
+                      help="which configuration setting to use", 
+                      metavar="string")
     
-    parser.add_option("--working_dir", 
+    parser.add_option("-m", "--mode", 
+                      dest="mode", 
+                      default='',
+                      metavar="String",
+                      help="comma separated list of analysis modes")
+    
+    parser.add_option("--wd", 
                       dest="workFolder", 
                       default="./seq_work/",
                       metavar="Directory",
@@ -216,58 +324,89 @@ if __name__ == '__main__':
 
 
     (options,args) = parser.parse_args()
-    #verbose = options.verbose
-    #mode = options.mode
-    #config = options.config
+    configFileName = options.config
+    configName = options.configName
+    
+    config = ReflectionConfig()    
+    config.readfp(open(configFileName))
+    config.reflect(configName,options)
+    
+    #Set variables
+    verbose = options.verbose
+    mode = options.mode.split(",")
+    blastDB = config.get(configName, "databasefile")
+    blastExe = config.get(configName, "blastExe")
     
     workFolder = options.workFolder
     refTag = options.genomicSeqTag
-    readTag1 = options.readTag1
-    readTag2 = options.readTag2
+    readFile1 = options.readTag1
+    readFile2 = options.readTag2
     
+    #Testing hard coded values
+    verbose = True
+    mode = ["vcf"]
     refTag = "NC_000913_2"
-    readTag1 = "Sample.GATCAG.R1"
-    readTag2 = "Sample.GATCAG.R2"
+    oligoReport = "20120709_FattyAcid_sequencing_colonies_primers.csv"
+    oligoSeqFile = "20120709_FA_recombination_oligos.fasta"
+    oligoSeqFile = options.workFolder + oligoSeqFile
     
+    #readFile1 = "LIB007074_GEN00011829_TCCAGT_L001_R1.fastq.bz2"
+    #readFile1 = "Sample_TCCAGT_R1.fastq"
+    #readFile1 = "TCCAGT_R1_2.fastq"
+    #readFile2 = "LIB007074_GEN00011829_TCCAGT_L001_R2.fastq.bz2"
     
-    if not os.path.exists(workFolder):
-        print "making work folder %s" % (workFolder)
-        os.mkdir(workFolder)
+    bTools = BlastTools()
+    bTools.verbose = verbose
+    bTools.blastDB = blastDB
+    bTools.blastExe = blastExe
     
-    readTag = readTag1
-    drefTag = workFolder + refTag
-    dreadTag = workFolder + readTag1
-    dreadTag1 = workFolder + readTag1
-    dreadTag2 = workFolder + readTag2
+    sampleCode = parseSampleCode(readFile1, readFile2, regex='.*_([ATCG]+)_.*',tag="Sample_%s")
+    print "Using Sample Code [%s]" % (sampleCode)
     
-    print "building reference index"
-    call = "bowtie2-build %s %s > bowtie2_ref_index_log.txt" % (refTag,drefTag)
-    print call
+    if "hit_count" in mode:
+        oligoRecords = parseRecOligoFile(oligoReport)
+        targetMap = {}
+        for rowName in oligoRecords.getRowNames():
+            start = oligoRecords.getElement(rowName, "genomic_start")
+            end = oligoRecords.getElement(rowName, "genomic_end")
+            middle = (float(start)+float(end))/2.0
+            location = oligoRecords.getElement(rowName, "sequencing location")
+            targetMap[rowName] = (float(start),float(end),float(location))
+            print "[%s] => ([%s] <-> [%s]) [%s]" % (rowName,start,end,location)
+                   
+        targetCount = bTools.blastAlignSequences(targetMap, readFile1,readType="fastq")
+    
+        blastReport = Report()
+        blastReport.addColumnHash("blast_hit_count", targetCount)
+    
+        writer = ReportWriter()
+        writer.setFile("Blast_hit_count.csv")
+        writer.write(blastReport)
+    
+    if "vcf" in mode:
+        idTag = "Sample_%s" % (sampleCode)
+        sTools = SeqReadTools()
+        sTools.verbose = True
+        sTools.refGenomeTag = refTag
+        sTools.workingDir = workFolder
+        sTools.refGenomeDir = workFolder
+        sTools.refGenomeTag = refTag
+        (id,dID,bamFile) = sTools.samProcessRead(readFile1,readFile2,idTag=sampleCode)
+        vcfFile = sTools.vcfProcess(bamFile, idTag = id)
+        
+        processVCF = ProcessVCF()
+        processVCF.blastTools = bTools
+        vcfAlignment = processVCF.alignVCF(oligoSeqFile,vcfFile,idTag=sampleCode)
+        
+        #vcfReportName = "%s_vcf_report.csv" % (sampleCode)
+        #writer = ReportWriter()
+        #writer.setFile(vcfReportName)
+        #writer.write(vcfAlignmentReport)
+    
+    print "done"   
+    #print "finding VCF information"
+    #call = "freebayes --fasta-reference %s %s_s.bam -v %s_%s.vcf" % (refTag,dreadTag,refTag,readTag)
+    #print call
     #subprocess.call(call,shell=True)
-    
-    print "aligning sequences to reference"
-    call = "bowtie2 -q -p 4 --mp 1,1- --end-to-end %s -1 %s.fastq.gz -2 %s.fastq.gz -S %s.sam" % (drefTag,readTag1,readTag2,dreadTag1)
-    print call
-    #subprocess.call(call,shell=True)
-    
-    print "creating bam file"
-    call = "samtools view -S -b %s.sam -o %s.bam" % (dreadTag,dreadTag)
-    print call
-    #subprocess.call(call,shell=True)
-    
-    print "sorting bam file"
-    call = "samtools sort %s.bam %s_s" % (dreadTag,dreadTag)
-    print call
-    #subprocess.call(call,shell=True)
-    
-    print "indexing bam file"
-    call = "samtools index %s_s.bam" % (dreadTag)
-    print call
-    #subprocess.call(call,shell=True)
-    
-    print "finding VCF information"
-    call = "freebayes --fasta-reference %s %s_s.bam -v %s_%s.vcf" % (refTag,dreadTag,refTag,readTag)
-    print call
-    subprocess.call(call,shell=True)
     
 

@@ -44,14 +44,14 @@ def main_function():
                       default=False,
                       help="set verbose mode")
     
-    parser.add_option("--masterConfig", 
+    parser.add_option("-c","--config", 
                       dest="config", 
                       default="redirector.config",
                       help="master configuration file", 
                       metavar="FILE")
                   
-    parser.add_option("-c", "--configfile", 
-                      dest="configFileName", 
+    parser.add_option("--model_config", 
+                      dest="modelConfig", 
                       default="model_config.txt",
                       help="configuration file", 
                       metavar="FILE")
@@ -271,7 +271,7 @@ def main_function():
     modelFactory.protectedTargets = protectedTargets
     (fluxModel,modelMatrix,reducer,geneReduction) = modelFactory.loadModel(modelNames)    
     
-    if verbose: print "removing objectives from target set"
+    if verbose: print "Removing objectives from target set"
     targets = modelMatrix.targets
     targets = set(targets).difference(protectedTargets)
     if verbose: print "Targets List Size [%s]" % len(targets)
@@ -279,7 +279,7 @@ def main_function():
     if verbose: print "Simultanious Control %s" % simControl
            
     #-------------------------------------------------------------------
-    # Pre discovery of flux bound current not used due to instability
+    # Pre-discovery of flux bound current not used due to instability
     #-------------------------------------------------------------------
         
     primeFluxBoundaries = {}
