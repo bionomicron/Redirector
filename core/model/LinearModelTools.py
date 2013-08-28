@@ -8,9 +8,8 @@ Set of functions for manipulating linear optimization models of metabolic networ
 
 from core.model.LinearModel import LinearModel
 from core.model.LPSolver import LPSolver
-from core.util.Report import Report
 from numpy import array
-import re,operator
+import re, operator, pickle
     
 def vectorMultiply(v1,v2):
     result = 0;
@@ -56,6 +55,68 @@ def reduceVector(data,delta = 0.1,min=1e-4):
             previous = v
             continue
     return r
+
+def reduce(modelMatrix,geneMap,rGeneMap,loadFileName,protectedTargets=[],useGeneMap=False,preload=False,verbose=False):
+    '''
+    Reduce linear model
+    #! currently being redeveloped ==> not funcitonal
+    '''
+    if verbose: print "==Performing Reduction=="        
+    oMSize = len(modelMatrix.getRowNames())
+    oRSize = len(modelMatrix.getColumnNames())
+        
+    rTargets = modelMatrix.getColumnNames()
+    preferedTargets = set(rTargets).difference(modelMatrix.targets)
+        
+    irGeneMap = rGeneMap
+    if preload and loadFileName != '':
+        (reducer,modelMatrix,rGeneMap) = self.load(loadFileName)
+    else:
+        reducer = ReduceLp()
+        reducer.verbose = verbose
+        reducer.protectedTargets = protectedTargets
+        reducer.preferedTargets = preferedTargets
+        reducer.geneMap = geneMap
+        reducer.rGeneMap = rGeneMap    
+            
+        modelMatrix = reducer.reduceColumns(modelMatrix)  
+        modelMatrix = reducer.reduce(modelMatrix,rTargets)
+        modelMatrix = reducer.reduceRows(modelMatrix)
+        
+    geneCluster = None
+    if geneMap != None:
+        (genePairs,rGeneMap,geneCluster) = reducer.reduceGeneMap(geneMap,irGeneMap)
+        
+    #checkReduction for gene Map
+    if rGeneMap != None:
+        colNames = modelMatrix.getColumnNames()
+        for (rName,gSet) in rGeneMap.items():
+            if rName in reducer.removedColumns:
+                del rGeneMap[rName]
+                    
+        for (rName,gSet) in rGeneMap.items():
+            if rName not in colNames and rName :
+                print "--Failed to find control reaction in model!: [%s] : [%s]" % (rName,gSet)
+                del rGeneMap[rName]
+                if rName in reducer.removedColumns:
+                    print "reaction member of removed columns"
+        
+    iMSize = len(modelMatrix.getRowNames())
+    iRSize = len(modelMatrix.getColumnNames())
+        
+    if verbose:
+        print "Original metabolites (%s) reactions (%s)" % (oMSize,oRSize)
+        print "Reduced metabolites (%s) reactions (%s)" % (iMSize,iRSize)
+            
+    itargets = set(modelMatrix.getColumnNames()).intersection(modelMatrix.targets)
+    modelMatrix.targets = itargets
+        
+    if loadFileName != '':    
+        loadFile = open(loadFileName,'w')
+        pickle.dump((reducer,modelMatrix,rGeneMap),loadFile)
+        loadFile.close()
+                
+    return (reducer,modelMatrix,rGeneMap,geneCluster)
 
 class VarabilityAnalysis():
     

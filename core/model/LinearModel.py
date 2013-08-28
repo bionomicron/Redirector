@@ -167,7 +167,7 @@ class LinearModel(SecondOrderCache):
         l < x < u
     
     Extended Linear Control Model
-    Two additional components:
+    With additional components:
     4)Annotations
     5)Targets
     6)ControlMap

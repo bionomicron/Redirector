@@ -7,9 +7,9 @@ Church Lab
 
 User interface command line method for running redirector analysis and framework
 4 major parts
-1) Parsing model, control map
+1) Parsing model
 2) Generating control libraries
-3) Generating MILP model 
+3) Generating MILP, objective reconstruction model 
 4) Optimization and Progressive Target Discovery
 
 Example usage:
@@ -38,163 +38,37 @@ def main_function():
 
     parser = OptionParser()
     
-    parser.add_option("-v", "--verbose",
-                      action="store_true", 
-                      dest="verbose", 
-                      default=False,
-                      help="set verbose mode")
+    parser.add_option("-v", "--verbose", action="store_true", dest="verbose", default=False, help="set verbose mode")
     
-    parser.add_option("-c","--config", 
-                      dest="config", 
-                      default="redirector.config",
-                      help="master configuration file", 
-                      metavar="FILE")
+    parser.add_option("-c","--config", dest="config", default="redirector.config", help="master configuration file", metavar="FILE")
                   
-    parser.add_option("--model_config", 
-                      dest="modelConfig", 
-                      default="model_config.txt",
-                      help="configuration file", 
-                      metavar="FILE")
+    parser.add_option("--model_config", dest="modelConfig", default="model.config", help="configuration file", metavar="FILE")
     
-    parser.add_option("-n","--configNames",
-                      type = "string",
-                      dest = "configNames",
-                      default = "Default",
-                      help = "comma separated list of configuration settings to include",
-                      )    
+    parser.add_option("-n","--configNames", type = "string", dest = "configNames", default = "Default", help = "comma separated list of configuration settings to include",metavar="FILE")
     
-    parser.add_option("-m","--modelname",
-                      type = "string", 
-                      dest="modelName", 
-                      default="",
-                      help="name of model from configuration file", 
-                      metavar="String")
+    parser.add_option("-m","--modelname", type = "string", dest="modelName", default="", help="name of model from configuration file", metavar="String")
     
-    parser.add_option("-b","--bioObjective", 
-                      type = "string",
-                      dest="bioObj", 
-                      default = 'Biomass',
-                      help="name of biological objective reaction", 
-                      metavar="String")
+    parser.add_option("-b","--bioObjective", type = "string", dest="bioObj", default = 'Biomass', help="name of biological objective reaction", metavar="String")
     
-    parser.add_option("-s","--synthObjective",
-                      type = "string",
-                      dest="synthObj", 
-                      default='',
-                      help="name of synthetic objective reaction", 
-                      metavar="String")
+    parser.add_option("-s","--synthObjective", type = "string", dest="synthObj", default='', help="name of synthetic objective reaction", metavar="String")
                        
-    parser.add_option("-o","--outputfile", 
-                      dest="outputFileName",
-                      default = "rd_output.csv",
-                      help="name of report FILE", 
-                      metavar="FILE")
+    parser.add_option("--sn", "--searchNeighborhood", dest = "searchNeighborhood", default = 1, type = int, help = "size of search neighborhood", metavar = "int")
     
-    parser.add_option("-r", "--result_directory",
-                       dest="resultDirectory", 
-                       default='../../results/',
-                       help = "directory where results are stored")
+    parser.add_option("--iter", "--searchIterations", dest = "iterations", default = 1, type = int, help = "maximum number of iterations, if blank no max", metavar = "int")
     
-    parser.add_option("--bt", "--biologicalTarget", 
-                      dest = "bioTarget", 
-                      default = 0.20, 
-                      type = float,
-                      help = "minimum percentage of the biological objective to maintain", 
-                      metavar = "float")
+    parser.add_option("--report", action = "store_true", dest = "isReport", default = False, help = "Write report", metavar = "boolean")
     
-    parser.add_option("--sn", "--searchNeighborhood",
-                      dest = "searchNeighborhood",
-                      default = 1,
-                      type = int,
-                      help = "size of search neighborhood",
-                      metavar = "int")
+    parser.add_option("--pl","--preload", dest = "preload", default = 0, type = int, help = "indicate size of pre-made library to load for faster start")
     
-    parser.add_option("--iter", "--searchIterations",
-                      dest = "iterations",
-                      default = 1,
-                      type = int,
-                      help = "maximum number of iterations, if blank no max",
-                      metavar = "int")
+    parser.add_option("--ps", "--preStart", dest = "preStart", default = 0, type = int, help = "start from previous iteration state", metavar = "int")
+        
+    parser.add_option("--gm", "--GeneMap", action="store_true", dest = "useGeneMap", default = False, help = "Use Gene Map")
     
-    parser.add_option("--targets",
-                      dest = "targets",
-                      default = '',
-                      help = "Valid reaction targets"
-                      )
-
-    parser.add_option("--protectTargets",
-                      action = "store_true",
-                      dest = "protectTargets",
-                      default = False,
-                      help = "Do not allow selected targets to be altered"
-                      )
+    parser.add_option("--control", dest="control", default = "flat", help = "control library type, flat,binary,sense")
     
-    parser.add_option("--report",
-                      action = "store_true",
-                      dest = "isReport",
-                      default = False,
-                      help = "Write report",
-                      metavar = "boolean")
+    parser.add_option("--simocontrol", dest="simoControl", default = 1.0, help = "control library type, flat,random,binary,sense")
     
-    
-    parser.add_option("--pl","--preload",
-                      dest = "preload",
-                      default = 0,
-                      type = int,
-                      help = "indicate size of pre-made library to load for faster start"
-                      )
-    
-    parser.add_option("--ps", "--preStart",
-                      dest = "preStart",
-                      default = 0,
-                      type = int,
-                      help = "start from previous iteration state",
-                      metavar = "int"
-                      )
-    
-    parser.add_option("--aneal",
-                       dest= "aneal",
-                       default= 0.0,
-                       help= "use maximum library then reduction")
-    
-    parser.add_option("--debug",
-                      action="store_true",
-                      dest = "debug",
-                      default = False,
-                      help = "turn on debug mode",
-                      )
-    
-    parser.add_option("--gm", "--GeneMap",
-                      action="store_true",
-                      dest = "useGeneMap",
-                      default = False,
-                      help = "Use Gene Map",
-                      )
-    
-    parser.add_option("--control",
-                      dest="control",
-                      default = "flat",
-                      help = "control library type, flat,binary,sense")
-    
-    parser.add_option("--simocontrol",
-                      dest="simoControl",
-                      default = 1.0,
-                      help = "control library type, flat,random,binary,sense")
-    
-    parser.add_option("--section",
-                      dest="subSections",
-                      default = '',
-                      help = "Comma separated list of sections of the model files to use")
-    
-    parser.add_option("--targetSlice",
-                      dest="targetSlice",
-                      default = '',
-                      help = "limit maximum target size, mostly for testing controls")
-    
-    parser.add_option("--primeBounds",
-                      dest="primeBounds",             
-                      default = False,
-                      help = "Do min/max analysis to find boundaries of fluxes")
+    parser.add_option("--section", dest="subSections", default = '', help = "Comma separated list of sections of the model files to use")
         
     # Parse options
     (options,args) = parser.parse_args()    
@@ -238,17 +112,19 @@ def main_function():
     #----------------------------
     # Parse Inputs
     #----------------------------
-    
-    verbose        = options.verbose 
-    modelName      = options.modelName
-    objectiveName  = options.bioObj
-    syntheticObjectiveName = options.synthObj
-    outputFileName = options.outputFileName
-    
+
+    verbose                     = config.get("Redirector","verbose") 
+    modelName                   = config.get("Redirector","modelName")
+    objectiveName               = config.get("Redirector","bioObj")
+    syntheticObjectiveName      = config.get("Redirector","synthObj")
+    searchSize                  = config.get("Redirector","searchNeighborhood")
+    searchIter                  = config.get("Redirector","iterations")
+    objectiveMinPercent         = config.get("Redirector","bioTarget")
+    usePrimeBounds              = config.get("Redirector","primeBounds")
+   
     #----------------------------------------------------
     # Initialize and set values for tools and factories
     #----------------------------------------------------
-    
     
     naturalObjective = {objectiveName:-1.0}
     syntheticObjective = {syntheticObjectiveName:-1.0}
@@ -258,7 +134,7 @@ def main_function():
     if verbose: print "Model names: [%s]" % (modelName)
     if verbose: print "Synthetic objective: [%s]" % (syntheticObjectiveName)
     if verbose: print "Parsing data files for [%s]" % (modelName)
-    if verbose: print "Search Size [%s] Iterations [%s]" % (options.searchNeighborhood,options.iterations)
+    if verbose: print "Search Size [%s] Iterations [%s]" % (searchSize,searchIter)
     
     '''
     I. Parse data files and configuration settings
@@ -269,7 +145,7 @@ def main_function():
     modelFactory = ModelFactory()
     config.reflect("Redirector",modelFactory)
     modelFactory.protectedTargets = protectedTargets
-    (fluxModel,modelMatrix,reducer,geneReduction) = modelFactory.loadModel(modelNames)    
+    (fluxModel,modelMatrix) = modelFactory.loadModel(modelNames)    
     
     if verbose: print "Removing objectives from target set"
     targets = modelMatrix.targets
@@ -283,16 +159,14 @@ def main_function():
     #-------------------------------------------------------------------
         
     primeFluxBoundaries = {}
-    objectiveMinPercent = options.bioTarget
+    
     boundarySearchSize = 1
     boundaryTargets = targets
     boundaryReportFileName = "rd_flux_boundary_M_%s_t_%s_p_%s_s_%s_analysis.csv" % (modelName,len(targets),objectiveMinPercent,boundarySearchSize)
     fluxBoundariesFile = "ControlLibraries/FluxBounds_M_%s_O_%s_T_%s_S_%s" % (modelName,objectiveName,objectiveMinPercent,syntheticObjectiveName)
-
-    print "Prime Bounds [%s]" % options.primeBounds
-    naturalFluxBounds = None
     
-    if options.primeBounds:
+    naturalFluxBounds = None
+    if usePrimeBounds:
         
         print "finding natural flux bounds"
         naturalFluxBounds = LinearModelVariableBoundarys(modelMatrix, objectiveName=objectiveName, targets=boundaryTargets, pickleFileName = fluxBoundariesFile, minObjectivePercent=objectiveMinPercent,searchSize=boundarySearchSize)
@@ -326,23 +200,23 @@ def main_function():
     controlMap = {}
     controlTags = options.control.split(",")
     
-    if "sense" in options.control:
+    if "sense" in controlTags:
         print "====>Using sensitivity control library"
         (icontrolLibraries, controlMap) = processLibrary.generateControl(modelMatrix,targets,targetsOnly = False)
         icontrolLibraries = processLibrary._filterControl(icontrolLibraries, targets)
         controlLibraries.extend(icontrolLibraries)
             
-    if "flat" in options.control.split(","):
+    if "flat" in controlTags:
         print "====>Using flat control library"
         (icontrolLibraries) = processLibrary.seedTestLibrary(targets, randomize=False)
         controlLibraries.extend(icontrolLibraries)
         
-    if "random" in options.control.split(","): 
+    if "random" in controlTags: 
         print "====>Using random control library"
         (icontrolLibraries) = processLibrary.seedTestLibrary(targets, randomize=True, factor = 2.0)
         controlLibraries.extend(icontrolLibraries)
         
-    if "binary" in options.control.split(","):
+    if "binary" in controlTags:
         print "====>Using binary control library"
         binaryRange =[-3,-2,-1,0]
         icontrolLibraries = processLibrary.generateBinaryControl(targets,binaryRange)
@@ -404,11 +278,12 @@ def main_function():
     #----------------------------
        
     if options.isReport:
+        
         try:
             print "Writing Full Model Report in %s" % (options.resultDirectory)
-            redirector.writeReport(ltReport,fluxModel,oPredVal,sPredVal,options.searchNeighborhood,options.iterations,fObjective,options.resultDirectory)
-        except:
-            print "Unable to write report: %s" % (sys.exc_info[0])
+            redirector.writeReport(ltReport,fluxModel,oPredVal,sPredVal,searchSize,searchIter,fObjective,resultsDirectory)
+        except Exception, e:
+            print "Unable to write report: %s" % (e)
         try:
             targetReportName = "Target_Report_M_%s_N_%s_S_%s_K_%s_I_%s.txt" % (modelName,objectiveName,syntheticObjectiveName,options.searchNeighborhood,options.iterations)
             print "Writing Optimization target Report %s" % (targetReportName)

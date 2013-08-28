@@ -99,7 +99,6 @@ class ModelFactory:
         self.debug = False
         self.preLoad = False
         self.useGeneMap = False
-        self.useReduced = False
         self.geneFill = False
         self.orderGenes = False
         
@@ -180,7 +179,6 @@ class ModelFactory:
         #---------------------------
         # Select subsections
         #---------------------------
-        subsections = self.subSections
         if self.subSections != '':
             subSections = self.subSections.split(',')
             subValues= fluxModel.getMetabolicNetwork().getAnnotation("Section")
@@ -212,7 +210,7 @@ class ModelFactory:
     
     def numericalRefactorModel(self,model,floor=1.0,minValue=1e-3,maxFactor=100,verbose=True):
         '''
-        Method for numerically refactor the linear model
+        Method for numerically refactoring a linear model
         Currently only has floor option.
         '''
         columnNames = model.getColumnNames()
@@ -385,65 +383,6 @@ class ModelFactory:
             cGeneMap[value].add(key) 
         return (geneMap,rGeneMap)
             
-            
-    def reduce(self,modelMatrix,geneMap,rGeneMap,loadFileName):
-        if self.verbose: print "==Performing Reduction=="        
-        oMSize = len(modelMatrix.getRowNames())
-        oRSize = len(modelMatrix.getColumnNames())
-        
-        rTargets = modelMatrix.getColumnNames()
-        preferedTargets = set(rTargets).difference(modelMatrix.targets)
-        
-        irGeneMap = rGeneMap
-        if self.preLoad and loadFileName != '':
-            (reducer,modelMatrix,rGeneMap) = self.load(loadFileName)
-        else:
-            reducer = ReduceLp()
-            reducer.verbose = self.verbose
-            reducer.protectedTargets = self.protectedTargets
-            reducer.preferedTargets = preferedTargets
-            reducer.geneMap = geneMap
-            reducer.rGeneMap = rGeneMap    
-            
-            modelMatrix = reducer.reduceColumns(modelMatrix)  
-            modelMatrix = reducer.reduce(modelMatrix,rTargets)
-            modelMatrix = reducer.reduceRows(modelMatrix)
-        
-        geneCluster = None
-        if self.useGeneMap:
-            (genePairs,rGeneMap,geneCluster) = reducer.reduceGeneMap(geneMap,irGeneMap)
-        
-        #checkReduction for gene Map
-        if rGeneMap != None:
-            colNames = modelMatrix.getColumnNames()
-            for (rName,gSet) in rGeneMap.items():
-                if rName in reducer.removedColumns:
-                    del rGeneMap[rName]
-                    
-            for (rName,gSet) in rGeneMap.items():
-                if rName not in colNames and rName :
-                    print "--Failed to find control reaction in model!: [%s] : [%s]" % (rName,gSet)
-                    del rGeneMap[rName]
-                    if rName in reducer.removedColumns:
-                        print "reaction member of removed columns"
-        
-        iMSize = len(modelMatrix.getRowNames())
-        iRSize = len(modelMatrix.getColumnNames())
-        
-        if self.verbose:
-            print "Original metabolites (%s) reactions (%s)" % (oMSize,oRSize)
-            print "Reduced metabolites (%s) reactions (%s)" % (iMSize,iRSize)
-            
-        itargets = set(modelMatrix.getColumnNames()).intersection(modelMatrix.targets)
-        modelMatrix.targets = itargets
-        
-        if loadFileName != '':    
-            loadFile = open(loadFileName,'w')
-            pickle.dump((reducer,modelMatrix,rGeneMap),loadFile)
-            loadFile.close()
-                
-        return (reducer,modelMatrix,rGeneMap,geneCluster)
-    
     def geneCluster(self,rGeneMap,geneCluster):
         '''
         find clusters of linked controls
@@ -502,15 +441,15 @@ class ModelFactory:
         Primary function of factory
         '''
         
-        #Parse FluxModel object
+        #Parse flux model files
         (fluxModel,modelMatrix) = self.parseModel(modelNames)
         
         if self.verbose: print "Reactions: %s" % (len(modelMatrix.getColumnNames()))
         if self.verbose: print "Targets %s" % (len(modelMatrix.targets))
         
-        #-----------------------------
-        # Adjust or refactor model
-        #-----------------------------
+        #---------------------------------------------------------------------------
+        # Adjust or refactor model to reduce presence of very small coefficents
+        #---------------------------------------------------------------------------
         coefficentFloor = 1.0
         if self.verbose: print "Refactoring coefficients of linear model to [%s]" % (coefficentFloor)
         modelMatrix = self.numericalRefactorModel(modelMatrix, floor=coefficentFloor, verbose=True)
@@ -530,34 +469,19 @@ class ModelFactory:
             for target in modelMatrix.targets:
                 rGeneMap[target] = target
 
-        
-        #----------------------------
-        # Reduce Model #! remove reduction functions: complex and don't seem to give much improvement.
-        #---------------------------- 
-        reducedFileName = "reducedFile_" + str(modelNames)
-        reducer = None
-        geneCluster = {}
-        
-        if self.preLoad and os.path.exists(reducedFileName) and False:
-            (reducer,modelMatrix,controlMap) = self.load(reducedFileName)
-        elif self.useReduced:
-            if self.verbose: "---Print performing model reductions--"
-            originalModel = LinearModel()
-            originalModel.extend(modelMatrix)
-            (reducer,modelMatrix,controlMap,geneCluster) = self.reduce(modelMatrix,geneMap,rGeneMap,reducedFileName)
-            #!self.checkReduction(originalModel, modelMatrix) #! this method needs work to produce more informative and readable results
-            
         #---------------------------------
         # finish populating geneCluster
         #---------------------------------
+        geneCluster = {}
         if controlMap != None:
             (geneCluster) = self.geneCluster(controlMap, geneCluster)
             
         modelMatrix.controlMap = rGeneMap #important to use this after filtering and fixing gene set.
+        modelMatrix.controlCluster = geneCluster
         targets = self.sliceTargets(modelMatrix)
         modelMatrix.targets = targets
         
-        return (fluxModel,modelMatrix,reducer,geneCluster)
+        return (fluxModel,modelMatrix)
 
     def getReactionGeneMap(self,data):
         result = {}

@@ -17,12 +17,12 @@ from Bio.Seq import Seq
 from Bio import Entrez,SeqIO
 from Bio.SeqRecord import SeqRecord
 
-import os,re
+import os,re, csv
 import subprocess
 from optparse import OptionParser
 import difflib
 
-def parseSampleCode(name1,name2,regex='.*_([ATCG]+)_.*',tag="Sample_%s"):
+def parseSampleNameTag(name1,name2,regex='.*_([ATCG]+)_.*',tag="Sample_%s"):
     difference = difflib.SequenceMatcher()
     
     difference.set_seqs(name1, name2)
@@ -41,6 +41,16 @@ def parseSampleCode(name1,name2,regex='.*_([ATCG]+)_.*',tag="Sample_%s"):
     rtag = match.group(1)
     result = tag % rtag
     return result
+
+def parseRecombinationOligoFile(filename):
+    header = ["Row Names", "original", "hits", "genomic_start", "genomic_end", "genomic_strand", "sequencing location"]
+    fp = open (filename,'rb')
+    reader = csv.DictReader(filter(lambda row: row[0]!='#', fp),delimiter="\t",fieldnames=header)
+    result = {}
+    for l in reader:
+        key = l["Row Names"]
+        result[key] = l
+    return result
     
 
 def parseRecOligoFile(filename):
@@ -48,16 +58,23 @@ def parseRecOligoFile(filename):
     header={"Row Names":"Row Names", "original":"original", "hits":"hits", "genomic_start":"genomic_start", "genomic_end":"genomic_end", "genomic_strand":"genomic_strand","sequencing location":"sequencing location"}
     keyTag = "Row Names"
     record = parser.parseToReport(filename, keyTag, header, unique=True)
-    
     return record
 
 def parseVCFFile(fileName):
-    parser = FlatFileParser(delimiter='\t', comment='##', emptyField='NA')
-    header={"#CHROM":"CHROM","POS":"POS","ID":"ID","REF":"REF","ALT":"ALT","QUAL":"QUAL","FILTER":"FILTER","INFO":"INFO","FORMAT":"FORMAT","unknown":"unknown"}
-    keyTag = "POS"
-    record = parser.parseToReport(fileName, keyTag, header, unique=True)
+    header = ["#CHROM","POS","ID","REF","ALT","QUAL","FILTER","INFO","FORMAT","unknown"]
+    fp = open(fileName,'rb')
+    reader = csv.DictReader(filter(lambda row: row[0:2]!='##', fp),delimiter="\t",fieldnames=header)
+    result = {}
+    for d in reader:
+        key = d["POS"]
+        result[key] = d
     
-    return record
+    #parser = FlatFileParser(delimiter='\t', comment='##', emptyField='NA')
+    #header={"#CHROM":"CHROM","POS":"POS","ID":"ID","REF":"REF","ALT":"ALT","QUAL":"QUAL","FILTER":"FILTER","INFO":"INFO","FORMAT":"FORMAT","unknown":"unknown"}
+    #keyTag = "POS"
+    #record = parser.parseToReport(fileName, keyTag, header, unique=True)
+    
+    return result
 
 class SeqReadTools:
     
@@ -83,7 +100,7 @@ class SeqReadTools:
                 m = match[0]
                 idTag = r1[m[0]:m[0]+m[2]]
             if idTag == '':
-                idTag = readTag1
+                idTag = r1
             
         drefTag = self.refGenomeDir + self.refGenomeTag
         dIdTag = self.workingDir + idTag
@@ -153,10 +170,10 @@ class ProcessVCF:
         result = prefix + newSeq + post
         return result
 
-    def findTargets(self,targetReport,feature,minQuality=10,logFile=None):
+    def findTargets(self,targetMap,feature,minQuality=10,logFile=None):
         start = feature.location.start.position
         end = feature.location.end.position
-        locations = targetReport.getRowNames()
+        locations = targetMap.keys()
         matches = filter(lambda x: start<=float(x)<=end,locations)
         
         querySeq = feature.qualifiers["query"]
@@ -171,7 +188,7 @@ class ProcessVCF:
             floc = float(loc)
             seqStart = int(floc-start)
             
-            target = targetReport.getRow(loc)
+            target = targetMap[loc]
             ref = target["REF"]
             alts = target["ALT"].split(",")
             quality = target["QUAL"]
@@ -208,14 +225,15 @@ class ProcessVCF:
         
         return result
 
-    def annotateAlignment(self,targetMap,featuresArray,logFile=None):
+    def annotateAlignment(self,targetMap,featuresArray,idTag):
+        readLogName = "read_log_%s.txt" % (idTag)
+        logFP = open(readLogName,"w")
         result = {}
-        report = Report()
         
         for features in featuresArray:
             for feature in features:
                 id = feature.id
-                targets = self.findTargets(targetMap, feature, minQuality= 10, logFile = logFile)
+                targets = self.findTargets(targetMap, feature, minQuality= 10, logFile = logFP)
                 result[id] = targets
         return result
 
@@ -233,10 +251,7 @@ class ProcessVCF:
         blastedFeatures = self.blastTools.seqBlastToFeatures(blastDB, blastExe, targetFile, blastType = "blastn",scoreMin = 1e-5)
         
         if verbose: print "finished blasting locations"
-        readLogName = "read_log_%s.txt" % (idTag)
-        logFile = open(readLogName,"w")
-        alignmentReport = self.annotateAlignment(readRecord, blastedFeatures,logFile=logFile)
-        logFile.close()
+        alignmentReport = self.annotateAlignment(readRecord, blastedFeatures)
         
         return alignmentReport
         
@@ -264,13 +279,6 @@ def filterReadFile(fileName,output,headerRegx,dataRegx):
 
 
 if __name__ == '__main__':
-    '''
-    REFERENCE_SEQS_0 = os.path.join(DATA_ROOT,
-            'FattyAcid_sequencing_targets.fasta')
-    ANALYSIS_OUTPUT_DIR_0 = os.path.join(OUTPUT_ROOT,
-            'analysis_output_2013_06_03')
-    run(REFERENCE_SEQS_0, ANALYSIS_OUTPUT_DIR_0)
-    '''
     
     parser = OptionParser()
     
@@ -300,7 +308,7 @@ if __name__ == '__main__':
     
     parser.add_option("--wd", 
                       dest="workFolder", 
-                      default="./seq_work/",
+                      default="./",
                       metavar="Directory",
                       help="Directory to store intermediate files")
     
@@ -360,7 +368,7 @@ if __name__ == '__main__':
     bTools.blastDB = blastDB
     bTools.blastExe = blastExe
     
-    sampleCode = parseSampleCode(readFile1, readFile2, regex='.*_([ATCG]+)_.*',tag="Sample_%s")
+    sampleCode = parseSampleNameTag(readFile1, readFile2, regex='.*_([ATCG]+)_.*',tag="Sample_%s")
     print "Using Sample Code [%s]" % (sampleCode)
     
     if "hit_count" in mode:
@@ -384,15 +392,16 @@ if __name__ == '__main__':
         writer.write(blastReport)
     
     if "vcf" in mode:
-        idTag = "Sample_%s" % (sampleCode)
+        
+        vcfFile = "%s.vcf" % (sampleCode)
         sTools = SeqReadTools()
         sTools.verbose = True
         sTools.refGenomeTag = refTag
         sTools.workingDir = workFolder
         sTools.refGenomeDir = workFolder
         sTools.refGenomeTag = refTag
-        (id,dID,bamFile) = sTools.samProcessRead(readFile1,readFile2,idTag=sampleCode)
-        vcfFile = sTools.vcfProcess(bamFile, idTag = id)
+        #(id,dID,bamFile) = sTools.samProcessRead(readFile1,readFile2,idTag=sampleCode)
+        #vcfFile = sTools.vcfProcess(bamFile, idTag = id)
         
         processVCF = ProcessVCF()
         processVCF.blastTools = bTools
