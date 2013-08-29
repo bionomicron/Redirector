@@ -5,9 +5,8 @@ The Redirector framework is a set of methods based on a steady state model of ba
 This software package has only just been opened to general usage so please be aware that it has not been thoroughly tested by public users.  I will be working to make it less buggy, better commented and easier to use.  Constructive feedback and suggestions are appreciated but development time is limited, thanks for your patience. 
 
 ## Guides
-*See the Redirctor GIT Wiki
-'http://github.com/bionomicron/Redirector/wiki'
-*Also try auto documentation from in line python documentation
+* See the Redirctor GIT Wiki: 'http://github.com/bionomicron/Redirector/wiki'
+* Also try auto documentation from in line python documentation
 
 ## Useful Links
 * PuLP-or: http://code.google.com/p/pulp-or/
