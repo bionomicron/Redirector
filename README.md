@@ -1,7 +1,7 @@
 
-# Redirector Usage
+## Redirector Usage
 
-## Redirector Config File
+### Redirector Config File
 * Default config file is Redirector.config
 * Format: standard python config setup
 * Changing '''Redirector Model''' configuration in this file will change the setting for all other configurations
@@ -13,11 +13,17 @@
   $ python Redirector.py -h
 ```
 
+
+
 * Most used command line inputs information
 ``` bash
-  $ python Redirector.py -m <model name> -b <biological objective> -s <production objective> -c <model config file>\ 
-  -n 'Default' --iter <number of iterations> --sn <search neighborhood> --section <subsection of loaded model to use>\  
-  --control <flat,binary,sense> --simocontrol <number of simulatanious metabolic alterations to a target>  --report
+  $ python Redirector.py -m <model name> -b <biological objective>\
+			-s <production objective> -c <model config file>\ 
+			-n 'Default' --iter <number of iterations> --sn <search neighborhood>\
+			--section <subsection of loaded model to use>\
+			--control <flat,binary,sense>\
+			--simocontrol <number of simulatanious metabolic alterations to a target>\
+			--report
 ```
 
 * Pre-made configuration 
