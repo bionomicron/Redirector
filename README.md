@@ -5,22 +5,23 @@ The Redirector framework is a set of methods based on a steady state model of ba
 This software package has only just been opened to general usage so please be aware that it has not been thoroughly tested by public users.  I will be working to make it less buggy, better commented and easier to use.  Constructive feedback and suggestions are appreciated but development time is limited, thanks for your patience. 
 
 ## Guides
-* [[Installation]] - Walk through and pointers on installation and set up.
-* [[Tutorial]] - How to command line usage.
-* [[Configs]] - How control Redirector with the configuration files.
-* [[Development]] - Walk though of using Redirector objects in python command line and development.
+See the Redirctor GIT Wiki
+http://github.com/bionomicron/Redirector/wiki
+Also try auto documentation from in line python documentation
 
 ## Useful Links
-* [[PuLP-or | http://code.google.com/p/pulp-or/]]
-* [[Installing PuLP-or | http://code.google.com/p/pulp-or/wiki/InstallingPulpatHome]]
+* PuLP-or: http://code.google.com/p/pulp-or/
+* Installing PuLP-or: http://code.google.com/p/pulp-or/wiki/InstallingPulpatHome
 
 ### Key Redirector objects
-* LinearModel
+* ModelFactory: Factory object for parsing and generating LinearModel objects from flat files
+* LinearModel: Main data file for flux balance analysis and objective construction models
+* OptimizationControlRedirector: Analysis object which performs progressive target discovery
 
-## Redirector Usage
+## Usage
 
 ### Redirector Config File
-* Default config file is Redirector.config
+* Default config file is 'Redirector.config'
 * Format: standard python config setup
 * Changing '''Redirector Model''' configuration in this file will change the setting for all other configurations
 * Setting up different Config Tags will allow for easy development and tracking of all framework features related to a particular optimization.
