@@ -1,8 +1,7 @@
-Redirector Usage
------------------
 
-Redirector Config File
-=======================
+# Redirector Usage
+
+## Redirector Config File
 * Default config file is Redirector.config
 * Format: standard python config setup
 * Changing '''Redirector Model''' configuration in this file will change the setting for all other configurations
