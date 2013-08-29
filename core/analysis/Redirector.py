@@ -44,7 +44,7 @@ def main_function():
                   
     parser.add_option("--model_config", dest="modelConfig", default="model.config", help="configuration file", metavar="FILE")
     
-    parser.add_option("-n","--configNames", type = "string", dest = "configNames", default = "Default", help = "comma separated list of configuration settings to include",metavar="FILE")
+    parser.add_option("-n","--configNames", type = "string", dest = "configNames", default = "Default", help = "comma separated list of configuration settings to include", metavar="FILE")
     
     parser.add_option("-m","--modelname", type = "string", dest="modelName", default="", help="name of model from configuration file", metavar="String")
     
@@ -58,17 +58,17 @@ def main_function():
     
     parser.add_option("--report", action = "store_true", dest = "isReport", default = False, help = "Write report", metavar = "boolean")
     
-    parser.add_option("--pl","--preload", dest = "preload", default = 0, type = int, help = "indicate size of pre-made library to load for faster start")
+    parser.add_option("--pl","--preload", dest = "preload", default = 0, type = int, help = "indicate size of pre-made library to load for faster start", metavar="int")
     
     parser.add_option("--ps", "--preStart", dest = "preStart", default = 0, type = int, help = "start from previous iteration state", metavar = "int")
         
     parser.add_option("--gm", "--GeneMap", action="store_true", dest = "useGeneMap", default = False, help = "Use Gene Map")
     
-    parser.add_option("--control", dest="control", default = "flat", help = "control library type, flat,binary,sense")
+    parser.add_option("--control", dest="control", default = "flat", help = "control library type, flat,binary,sense", metavar="String")
     
-    parser.add_option("--simocontrol", dest="simoControl", default = 1.0, help = "control library type, flat,random,binary,sense")
+    parser.add_option("--simocontrol", dest="simoControl", default = 1.0, help = "number of simultaniously active controls", metavar="int")
     
-    parser.add_option("--section", dest="subSections", default = '', help = "Comma separated list of sections of the model files to use")
+    parser.add_option("--section", dest="subSections", default = '', help = "Comma separated list of sections of the model files to use", metavar="String")
         
     # Parse options
     (options,args) = parser.parse_args()    
@@ -291,6 +291,7 @@ def main_function():
             redirector.writeAnnotatedTargets(fObjective, modelMatrix, annotationName = "bnumber", regex="[a-zA-Z0-9\(\)]+", iteration = iteration, oPrediction = oPredVal, nPrediction = finalPredictionValue)
         except:
             print "failed to write %s" % (targetReportName)
+    
     print "Done"
         
 if __name__  == "__main__":

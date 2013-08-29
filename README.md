@@ -12,7 +12,7 @@ This software package has only just been opened to general usage so please be aw
 * PuLP-or: http://code.google.com/p/pulp-or/
 * Installing PuLP-or: http://code.google.com/p/pulp-or/wiki/InstallingPulpatHome
 
-### Key Redirector objects
+## Key Redirector objects
 * ModelFactory: Factory object for parsing and generating LinearModel objects from flat files
 * LinearModel: Main data file for flux balance analysis and objective construction models
 * OptimizationControlRedirector: Analysis object which performs progressive target discovery
