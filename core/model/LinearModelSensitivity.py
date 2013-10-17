@@ -6,8 +6,8 @@ import pickle
 import os.path
 from core.model.LinearModel import LinearModel
 from core.model.LPSolver import LPSolver
-from core.util.Report import Report
-from core.util.ReportWriter import ReportWriter
+from util.Report import Report
+from util.ReportWriter import ReportWriter
 
 from itertools import combinations
 from numpy import array, arange, mean

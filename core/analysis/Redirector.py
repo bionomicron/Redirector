@@ -26,13 +26,12 @@ from core.model.ModelFactory import ModelFactory
 from core.model.ConstructRegulationOptimization import ConstructRegulationOptimization
 from core.model.OptimizationControlRedirector import OptimizationControlRedirector
 from core.model.OptimizationControlTools import OptimizationControlFactory
-from core.util.Config import ReflectionConfig
-from core.util.Report import Report
-from core.util.ReportWriter import ReportWriter
+from util.Config import ReflectionConfig
+from util.Report import Report
+from util.ReportWriter import ReportWriter
 
 from optparse import OptionParser
 import os, sys
-
 
 def main_function():
 

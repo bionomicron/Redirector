@@ -5,7 +5,7 @@ Created on Dec 21, 2010
 '''
 
 from core.model.LinearModel import LinearModel
-from core.reader.FlatFileParser import FlatFileParser
+from util.FlatFileParser import FlatFileParser
 import re
 
 

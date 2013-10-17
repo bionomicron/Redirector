@@ -8,11 +8,11 @@ Factory for generating
 '''
 
 from core.model.LinearModel import LinearModel
-from core.reader.FlatFileParser import FlatFileParser
+from util.FlatFileParser import FlatFileParser
 from core.reader.FluxModelParser import FluxModelFlatFileParser 
 from core.reader.LinearModelParser import MetabolicNetworkParser
-from core.util.Config import ReflectionConfig
-from core.util.Report import Report
+from util.Config import ReflectionConfig
+from util.Report import Report
 import re, os, pickle
 
 class CreateLinearModel:

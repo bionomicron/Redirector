@@ -9,9 +9,9 @@ from core.model.LPSolver import LPSolver
 from core.model.ProcessModel import MatrixTools
 from core.model.OptimizationAnalysisTools import OptimizationDebugingTools
 from core.model.ConstructRegulationOptimization import ConstructRegulationOptimization
-from core.util.Report import Report
-from core.util.ReportWriter import ReportWriter
-from core.reader.FlatFileParser import FlatFileParser
+from util.Report import Report
+from util.ReportWriter import ReportWriter
+from util.FlatFileParser import FlatFileParser
 
 from time import time,strftime
 import pickle,os,re

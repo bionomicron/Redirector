@@ -8,7 +8,7 @@
 '''
 from core.do.FluxModel import FluxModel, MetabolicNetwork, Reaction, Objective, FluxLimit
 from core.do.FluxModelTools import ReactionParser
-from core.reader.FlatFileParser import FlatFileParser
+from util.FlatFileParser import FlatFileParser
 
 class TagedElement(dict):
     

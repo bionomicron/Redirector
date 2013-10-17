@@ -22,7 +22,7 @@ from Bio.Blast import NCBIStandalone, NCBIXML
 from Bio.SeqRecord import SeqRecord
 from Bio.Blast.Applications import BlastallCommandline
 
-from core.util.Report import Report
+from util.Report import Report
 
 class BlastTools:
     '''

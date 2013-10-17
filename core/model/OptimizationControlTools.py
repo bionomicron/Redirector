@@ -9,8 +9,8 @@ from core.model.LPSolver import LPSolver
 from core.model.LinearModelTools import reduceVector
 from core.model.ProcessModel import MatrixTools
 from core.model.LinearModelSensitivity import LinearModelSensitivity
-from core.util.Report import Report
-from core.util.ReportWriter import ReportWriter
+from util.Report import Report
+from util.ReportWriter import ReportWriter
 
 from numpy import array
 from time import time

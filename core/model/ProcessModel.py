@@ -4,7 +4,7 @@
 from core.model.LinearModel import LinearModel
 from core.model.ModelFactory import CreateLinearModel
 from core.reader.FluxModelParser import FluxModelFlatFileParser
-from core.util.Report import Report
+from util.Report import Report
 
 import re, os, pickle
 

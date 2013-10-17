@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 import re
-from core.util.Cache import IndexedCache, SecondOrderCache
-from core.util.Report import Report
+from util.Cache import IndexedCache, SecondOrderCache
+from util.Report import Report
 from numpy import mean
 
 class ParseEquations:

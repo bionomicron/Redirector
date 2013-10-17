@@ -5,8 +5,8 @@ Created: 9/28/2006
 Last Update: 5/16/2007: Graham Rockwell
 '''
 
-from core.util.Cache import IndexedCache, SecondOrderCache
-from core.util.Report import Report
+from util.Cache import IndexedCache, SecondOrderCache
+from util.Report import Report
 
 class Compound:
     '''

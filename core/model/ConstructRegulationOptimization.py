@@ -7,7 +7,7 @@ Method for constructing Bilevel Redirector Optimization as MILP
 from core.model.LinearModel import LinearModel
 from core.model.LinearModel import ParseEquations
 #from core.reader.LinearModelParser import ParseEquations
-from core.util.Report import Report
+from util.Report import Report
 from numpy import mean
 
 class ConstructRegulationOptimization:
