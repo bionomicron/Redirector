@@ -193,6 +193,7 @@ def joinVariants(vcfData,vcfCollection=None,strainID='None',joinDistance=50):
         matches = filter(g,vcfCollection.keys())
         
         result = {vcf["ID"]:vcf}
+        
         while len(matches) > 0:
             for loc in matches:
                 (istart,iend) = loc
@@ -222,7 +223,7 @@ def vcfCollectionReport(vcfCollection):
             strain = vcf["Strain"]
             if strain not in row.keys():
                 row[strain] = ''
-            row[strain] = row[strain] + "(%s,%s)" % (vcf["POS"],vcf["ALT"])
+            row[strain] = row[strain] + "(%s,%s,%s)" % (vcf["POS"],vcf["READS"],vcf["ALT"])
         
         result.add(loc,"count",len(row)) 
         for (strain,variantString) in row.items():
@@ -366,6 +367,8 @@ def vcfReport(vcfData, masterReport, refName='', minQuality = 30, minCount = 1):
         alreads = list(alreads)
         rCount = len(alreads)
         
+        vcf["READS"] = rCount
+        
         if float(quality < minQuality) or rCount < minCount:
             continue
         
@@ -390,7 +393,7 @@ def vcfReport(vcfData, masterReport, refName='', minQuality = 30, minCount = 1):
         masterReport.add(vID,"ref",ref)
         masterReport.add(vID,"alt",alt)
     
-    return (vcReport, masterReport)
+    return (vcfData, vcReport, masterReport)
 
 
 if __name__ == '__main__':
@@ -474,7 +477,7 @@ if __name__ == '__main__':
     
     #Quality values, may be taken from config later
     minQuality = 30.00
-    minCount = 0
+    minCount = 5 
     
     #Testing hard coded values
     refTag = "NC_000913_2"
@@ -503,6 +506,7 @@ if __name__ == '__main__':
     else:
         pathCode = match.group(1)
     if verbose: print "Path Code [%s]" % (pathCode)
+    
     #File Names
     vcfFile = "%s.vcf" % (sampleCode)
     bamFile = workFolder + "%s_s.bam" % (sampleCode)
@@ -562,9 +566,10 @@ if __name__ == '__main__':
         vcReport = Report()
         
         print "Building Variant information from VCF report"
-        (vcfReport,masterReport) = vcfReport(vcfData=vcfData, masterReport=masterReport, refName=refname, minQuality=minQuality, minCount=minCount)
-        
-        variantCollection = joinVariants(vcfData, joinDistance=100, vcfCollection=varCollection,strainID = pathCode)
+        (vcfData,vcfReport,masterReport) = vcfReport(vcfData=vcfData, masterReport=masterReport, refName=refname, minQuality=minQuality, minCount=minCount)
+
+        strainID = "%s_%s" % (sampleCode,pathCode)        
+        variantCollection = joinVariants(vcfData, joinDistance=100, vcfCollection=varCollection,strainID = strainID)
         varGroupReport = vcfCollectionReport(varCollection)
         
         print "Building VCF master pickle %s" % (mReportFile)
