@@ -43,9 +43,9 @@ setup(
     ],
     packages=find_packages(),
     install_requires=['PuLP==1.5.0','gmpy>=1.10'],
-    entry_points = ("""
-    [console_scripts]
-    redirector = core.analysis.Redirector:main_function
-    """
-    ),
+    #entry_points = ("""
+    #[console_scripts]
+    #redirector = core.analysis.Redirector:main_function
+    #"""
+    #)
 )

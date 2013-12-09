@@ -65,7 +65,7 @@ def main_function():
     
     parser.add_option("--control", dest="control", default = "flat", help = "control library type, flat,binary,sense", metavar="String")
     
-    parser.add_option("--simocontrol", dest="simoControl", default = 1.0, help = "number of simultaniously active controls", metavar="int")
+    parser.add_option("--simocontrol", dest="simoControl", default = 1.0, help = "number of simultaneously active controls", metavar="int")
     
     parser.add_option("--section", dest="subSections", default = '', help = "Comma separated list of sections of the model files to use", metavar="String")
         
@@ -118,7 +118,7 @@ def main_function():
     syntheticObjectiveName      = config.get("Redirector","synthObj")
     searchSize                  = config.get("Redirector","searchNeighborhood")
     searchIter                  = config.get("Redirector","iterations")
-    objectiveMinPercent         = config.get("Redirector","bioTarget")
+    objectiveMinPercent         = float(config.get("Redirector","bioTarget"))
     usePrimeBounds              = config.get("Redirector","primeBounds")
    
     #----------------------------------------------------
@@ -151,7 +151,7 @@ def main_function():
     targets = set(targets).difference(protectedTargets)
     if verbose: print "Targets List Size [%s]" % len(targets)
     simControl = options.simoControl
-    if verbose: print "Simultanious Control %s" % simControl
+    if verbose: print "Simultaneous Control %s" % simControl
            
     #-------------------------------------------------------------------
     # Pre-discovery of flux bound current not used due to instability

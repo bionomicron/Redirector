@@ -132,6 +132,7 @@ class VarianceTools:
         dIdTag = self.workingDir + idTag
         
         if not os.path.exists("%s.1.bt2" % drefTag):
+        #if True:
             print "building reference index"
             call = "bowtie2-build %s %s > bowtie2_ref_index_log.txt" % (drefTag,drefTag)
             if self.verbose: print "executing command: [%s]" % call
@@ -139,22 +140,22 @@ class VarianceTools:
         else:
             if self.verbose: print "building reference index found %s" % (drefTag)
         
-        if self.verbose: print "aligning sequences to reference"
+        if self.verbose: print ">aligning sequences to reference"
         call = "bowtie2 -q -p 4 -k 3 --local %s -1 %s -2 %s -S %s.sam" % (drefTag,r1,r2,dIdTag)
         if self.verbose: print "executing command: [%s]" % call
         subprocess.call(call,shell=True)
         
-        if self.verbose: print "creating bam file"
-        call = "samtools view -S -b %s.sam -o %s.bam" % (dIdTag,dIdTag)
+        if self.verbose: print ">creating bam file"
+        call = "samtools view -S -b -o %s.bam %s.sam" % (dIdTag,dIdTag)
         if self.verbose: print "executing command: [%s]" % call
         subprocess.call(call,shell=True)
         
-        if self.verbose: print "sorting bam file"
+        if self.verbose: print ">sorting bam file"
         call = "samtools sort %s.bam %s_s" % (dIdTag,dIdTag)
         if self.verbose: print "executing command: [%s]" % call
         subprocess.call(call,shell=True)
         
-        if self.verbose: print "indexing bam file"
+        if self.verbose: print ">indexing bam file"
         call = "samtools index %s_s.bam" % (dIdTag)
         if self.verbose: print "executing command: [%s]" % call
         subprocess.call(call,shell=True)
@@ -475,7 +476,7 @@ if __name__ == '__main__':
     readFile1 = options.readTag1
     readFile2 = options.readTag2
     
-    #Quality values, may be taken from config later
+    #Quality values, may be taken from configuration later
     minQuality = 30.00
     minCount = 5 
     
@@ -541,7 +542,7 @@ if __name__ == '__main__':
     else:
         varCollection = {}    
         
-    if pathCode in masterReport.getColumnNames() and False:
+    if pathCode in masterReport.getColumnNames():
         print "VCF already in Master Report"
     else:
         print "Process VCF to Report for sample code [%s]" % (sampleCode)
@@ -553,8 +554,9 @@ if __name__ == '__main__':
             print "%s found" % (bamFile)
                         
         if not os.path.exists(vcfFile) or "rebuild" in mode:
+        #if True:
             print "Building vcf file %s" % (vcfFile)    
-            vcfFile = sTools.vcfProcess(bamFile, idTag = id)
+            vcfFile = sTools.vcfProcess(bamFile, idTag = sampleCode)
         else:
             print "%s found" % (vcfFile)
         
@@ -577,7 +579,7 @@ if __name__ == '__main__':
         pickle.dump(masterReport,mReportFh)
         mReportFh.close()
         
-        print "Building Variance Collectoin %s" % (mVarianceLog)
+        print "Building Variance Collection %s" % (mVarianceLog)
         tempFH = open(mVarianceLog,"w")
         pickle.dump(varCollection,tempFH)
         tempFH.close()
