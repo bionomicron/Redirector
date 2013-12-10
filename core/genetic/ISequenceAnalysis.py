@@ -352,7 +352,27 @@ def filterReadFile(fileName,output,headerRegx,dataRegx):
     f.close()
     o.close()
             
-    return True    
+    return True
+
+def buildVCF(workFolder,sampleCode,mode):
+        
+        bamFile = workFolder + "%s_s.bam" % (sampleCode)
+        vcfFile = workFolder + "%s.vcf" % (sampleCode)
+        
+        if not os.path.exists(bamFile) or "rebuild" in mode:
+            print "Building bam file %s" % (bamFile)
+            (id,dID,bamFile) = sTools.samProcessRead(readFile1,readFile2,idTag=sampleCode)
+        else:
+            print "%s found" % (bamFile)
+                        
+        if not os.path.exists(vcfFile) or "rebuild" in mode:
+        #if True:
+            print "Building vcf file %s" % (vcfFile)    
+            vcfFile = sTools.vcfProcess(bamFile, idTag = sampleCode)
+        else:
+            print "%s found" % (vcfFile)
+        
+        return(bamFile,vcfFile)
 
 def vcfReport(vcfData, masterReport, refName='', minQuality = 30, minCount = 1):
     
@@ -483,15 +503,15 @@ if __name__ == '__main__':
     #Testing hard coded values
     refTag = "NC_000913_2"
     #oligoReport = "20120709_FattyAcid_sequencing_colonies_primers.csv"
-    oligoSeqFile = "20120709_FA_recombination_oligos_v2.fasta"  #! Make this something taken from the configuration file
-    oligoSeqFile = options.workFolder + oligoSeqFile    
+    #oligoSeqFile = "20120709_FA_recombination_oligos_v2.fasta"  #! Make this something taken from the configuration file
+    #oligoSeqFile = options.workFolder + oligoSeqFile    
     
     bTools = BlastTools()
     bTools.verbose = verbose
     bTools.blastDB = blastDB
     bTools.blastExe = blastExe
     
-    print "ISeuqence Analysis Version 1.0"
+    print "ISeuqence Analysis Version 1.2"
     print "Running Mode %s" % (mode)
     
     idCode = parseSampleNameTag(readFile1, readFile2, regex='.*_([ATCG\-]+)_.*',tag="%s")
@@ -502,16 +522,13 @@ if __name__ == '__main__':
     pathRegex = '.*GEN([0-9].+)'
     match = re.match(pathRegex,currentPath)
     if match == None:
-        print "No match on regex [%s] in  [%s]" %(pathRegex, currentPath)
+        print "No match on regular expression [%s] in  [%s]" %(pathRegex, currentPath)
         pathCode = "Zero"
     else:
         pathCode = match.group(1)
     if verbose: print "Path Code [%s]" % (pathCode)
     
     #File Names
-    vcfFile = "%s.vcf" % (sampleCode)
-    bamFile = workFolder + "%s_s.bam" % (sampleCode)
-    vcfFile = workFolder + "%s.vcf" % (sampleCode)
     masterReportFile = workFolder + "Master_Report.csv"
     mReportFile = workFolder + "Master_Report.bac"
     varianceReportFile = workFolder + "Variance_Report.csv"
@@ -528,9 +545,6 @@ if __name__ == '__main__':
         mReportFh = open(mReportFile,"r")
         masterReport = pickle.load(mReportFh)
         mReportFh.close()
-    elif os.path.exists(masterReportFile):
-        rReader = FlatFileParser()
-        masterReport = rReader.parseGenericReport(masterReportFile,keyTag="Row Names")
     else:
         masterReport = Report()
     
@@ -547,18 +561,7 @@ if __name__ == '__main__':
     else:
         print "Process VCF to Report for sample code [%s]" % (sampleCode)
         
-        if not os.path.exists(bamFile) or "rebuild" in mode:
-            print "Building bam file %s" % (bamFile)
-            (id,dID,bamFile) = sTools.samProcessRead(readFile1,readFile2,idTag=sampleCode)
-        else:
-            print "%s found" % (bamFile)
-                        
-        if not os.path.exists(vcfFile) or "rebuild" in mode:
-        #if True:
-            print "Building vcf file %s" % (vcfFile)    
-            vcfFile = sTools.vcfProcess(bamFile, idTag = sampleCode)
-        else:
-            print "%s found" % (vcfFile)
+        (bamFile,vcfFile) = buildVCF(workFolder, sampleCode, mode)
         
         print "Opening bam file [%s]" % (bamFile)
         samFile = pysam.Samfile(bamFile,"rb")
@@ -570,20 +573,24 @@ if __name__ == '__main__':
         print "Building Variant information from VCF report"
         (vcfData,vcfReport,masterReport) = vcfReport(vcfData=vcfData, masterReport=masterReport, refName=refname, minQuality=minQuality, minCount=minCount)
 
+        #Join variants that are close together
         strainID = "%s_%s" % (sampleCode,pathCode)        
         variantCollection = joinVariants(vcfData, joinDistance=100, vcfCollection=varCollection,strainID = strainID)
         varGroupReport = vcfCollectionReport(varCollection)
         
+        #Update data file of reported variants
         print "Building VCF master pickle %s" % (mReportFile)
         mReportFh = open(mReportFile,"w")
         pickle.dump(masterReport,mReportFh)
         mReportFh.close()
         
+        #Update data file of joined variants
         print "Building Variance Collection %s" % (mVarianceLog)
-        tempFH = open(mVarianceLog,"w")
-        pickle.dump(varCollection,tempFH)
+        varFH = open(mVarianceLog,"w")
+        pickle.dump(varCollection,varFH)
         tempFH.close()
         
+        #Write flat file of vcf master report and joined variant matrix
         if "vReport" in mode:
             print "Building VCF Master Report"
             writer = ReportWriter()
