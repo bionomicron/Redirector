@@ -69,6 +69,9 @@ def main_function():
     
     parser.add_option("--section", dest="subSections", default = '', help = "Comma separated list of sections of the model files to use", metavar="String")
         
+    parser.add_option("-o", dest="resultDirectory", default = './Result', help = "Directory to store analysis results", metavar="String")
+    
+    
     # Parse options
     (options,args) = parser.parse_args()    
     config = ReflectionConfig()    
