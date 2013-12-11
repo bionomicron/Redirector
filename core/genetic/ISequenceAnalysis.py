@@ -23,81 +23,6 @@ from optparse import OptionParser
 import difflib
 import pysam
 
-def parseSampleNameTag(name1,name2,regex='.*_([ATCG\-]+)_.*',tag="Sample_%s"):
-    difference = difflib.SequenceMatcher()
-    
-    difference.set_seqs(name1, name2)
-    match = difference.get_matching_blocks()
-    if len(match) != 0:
-        m = match[0]
-        idTag = name1[m[0]:m[0]+m[2]]
-    if idTag == '':
-        idTag = name1
-    
-    match = re.match(regex,idTag)
-    if match == None:
-        print "No match on regex [%s] in  [%s]" %(regex, idTag)
-        return idTag
-    
-    rtag = match.group(1)
-    result = tag % rtag
-    return result
-
-def parseRecombinationOligoFile(filename):
-    header = ["Row Names", "original", "hits", "genomic_start", "genomic_end", "genomic_strand", "sequencing location"]
-    fp = open (filename,'rb')
-    reader = csv.DictReader(filter(lambda row: row[0]!='#', fp),delimiter="\t",fieldnames=header)
-    result = {}
-    for l in reader:
-        key = l["Row Names"]
-        result[key] = l
-    return result
-
-def parseRecOligoFile(filename):
-    parser = FlatFileParser(delimiter='\t', comment='##', emptyField='NA')
-    header={"Row Names":"Row Names", "original":"original", "hits":"hits", "genomic_start":"genomic_start", "genomic_end":"genomic_end", "genomic_strand":"genomic_strand","sequencing location":"sequencing location"}
-    keyTag = "Row Names"
-    record = parser.parseToReport(filename, keyTag, header, unique=True)
-    return record
-
-def parseVCF(filename):
-    '''
-    @var filename: name of vcf file
-    @filename: String
-    @result:[{vcf}]
-    @summary:
-    parse VCF file to list of dicts
-    split alt sequences into seperate entries
-    '''
-    
-    header = ["#CHROM","POS","ID","REF","ALT","QUAL","FILTER","INFO","FORMAT","unknown"]
-    
-    fp = open(filename,'rb')
-    reader = csv.DictReader(filter(lambda row: row[0:2]!='##', fp),delimiter="\t",fieldnames=header)
-    reader.next()
-    
-    result = []
-    for d in reader:
-        d["CHROM"] = d["#CHROM"]
-        del d["#CHROM"]
-        d["QUAL"] = float(d["QUAL"])
-        
-        alt = d["ALT"].split(",")
-        for a in alt:
-            d["ALT"] = a
-            result.append(d)
-        
-    return result
-
-def parseVCFFile(filename):
-    reader = parseVCF(filename)
-    result = {}
-    for d in reader:
-        key = d["POS"]
-        result[key] = d
-    
-    return result
-
 class VarianceTools:
     '''
     Tools for processing high throughput sequencing assembly and analysis.
@@ -175,63 +100,6 @@ class VarianceTools:
         
         return resultFile
     
-def joinVariants(vcfData,vcfCollection=None,strainID='None',joinDistance=50):
-    if vcfCollection == None: 
-        vcfCollection = {}
-    
-    for vcf in vcfData:
-        vcf["Strain"] = strainID
-        vcf["ID"] = (strainID,vcf["POS"],vcf["ALT"])
-        
-        start = float(vcf["POS"])
-        end = start + len(vcf["REF"])
-        fstart = start
-        fend = end
-        
-        print "[%s] (%s,%s)" % (vcf["Strain"],start,end)
-        f = lambda x: (fstart-joinDistance) <= x <= (fend + joinDistance)
-        g = lambda x: f(x[0]) or f(x[1])
-        matches = filter(g,vcfCollection.keys())
-        
-        result = {vcf["ID"]:vcf}
-        
-        while len(matches) > 0:
-            for loc in matches:
-                (istart,iend) = loc
-                if istart < fstart: fstart = istart
-                if iend < fend: fend = iend
-                vcfValues = vcfCollection[loc]
-                if vcfValues != None:
-                    result.update(vcfValues)
-                del vcfCollection[loc]
-            matches = filter(g,vcfCollection.keys())
-        iLoc = (fstart,fend)
-        vcfCollection[iLoc] = result                
-                
-    return vcfCollection
-
-def vcfCollectionReport(vcfCollection):
-    result = Report()
-    
-    for (loc,vcfs) in vcfCollection.items():
-        (start,end) = loc
-        if vcfs == None: continue
-        
-        result.add(loc,"position",start)
-        
-        row = {}
-        for (id,vcf) in vcfs.items():
-            strain = vcf["Strain"]
-            if strain not in row.keys():
-                row[strain] = ''
-            row[strain] = row[strain] + "(%s,%s,%s)" % (vcf["POS"],vcf["READS"],vcf["ALT"])
-        
-        result.add(loc,"count",len(row)) 
-        for (strain,variantString) in row.items():
-            result.add(loc,strain,variantString)
-          
-    return result
-
 class ProcessVCF:
     
     def __init__(self):
@@ -331,6 +199,145 @@ class ProcessVCF:
         alignmentReport = self.annotateAlignment(readRecord, blastedFeatures,idTag)
         
         return alignmentReport
+
+def parseSampleNameTag(name1,name2,regex='.*_([ATCG\-]+)_.*',tag="Sample_%s"):
+    difference = difflib.SequenceMatcher()
+    
+    difference.set_seqs(name1, name2)
+    match = difference.get_matching_blocks()
+    if len(match) != 0:
+        m = match[0]
+        idTag = name1[m[0]:m[0]+m[2]]
+    if idTag == '':
+        idTag = name1
+    
+    match = re.match(regex,idTag)
+    if match == None:
+        print "No match on regex [%s] in  [%s]" %(regex, idTag)
+        return idTag
+    
+    rtag = match.group(1)
+    result = tag % rtag
+    return result
+
+def parseRecombinationOligoFile(filename):
+    header = ["Row Names", "original", "hits", "genomic_start", "genomic_end", "genomic_strand", "sequencing location"]
+    fp = open (filename,'rb')
+    reader = csv.DictReader(filter(lambda row: row[0]!='#', fp),delimiter="\t",fieldnames=header)
+    result = {}
+    for l in reader:
+        key = l["Row Names"]
+        result[key] = l
+    return result
+
+def parseRecOligoFile(filename):
+    parser = FlatFileParser(delimiter='\t', comment='##', emptyField='NA')
+    header={"Row Names":"Row Names", "original":"original", "hits":"hits", "genomic_start":"genomic_start", "genomic_end":"genomic_end", "genomic_strand":"genomic_strand","sequencing location":"sequencing location"}
+    keyTag = "Row Names"
+    record = parser.parseToReport(filename, keyTag, header, unique=True)
+    return record
+
+def parseVCF(filename):
+    '''
+    @var filename: name of vcf file
+    @filename: String
+    @result:[{vcf}]
+    @summary:
+    parse VCF file to list of dicts
+    split alt sequences into seperate entries
+    '''
+    
+    header = ["#CHROM","POS","ID","REF","ALT","QUAL","FILTER","INFO","FORMAT","unknown"]
+    
+    fp = open(filename,'rb')
+    reader = csv.DictReader(filter(lambda row: row[0:2]!='##', fp),delimiter="\t",fieldnames=header)
+    reader.next()
+    
+    result = []
+    for d in reader:
+        d["CHROM"] = d["#CHROM"]
+        del d["#CHROM"]
+        d["QUAL"] = float(d["QUAL"])
+        
+        alt = d["ALT"].split(",")
+        for a in alt:
+            d["ALT"] = a
+            result.append(d)
+        
+    return result
+
+def parseVCFFile(filename):
+    reader = parseVCF(filename)
+    result = {}
+    for d in reader:
+        key = d["POS"]
+        result[key] = d
+    
+    return result
+    
+def joinVariants(vcfData,vcfCollection={},strainID='None',joinDistance=50):
+    
+    for vcf in vcfData:
+        vcf["Strain"] = strainID
+        vcf["ID"] = (strainID,vcf["POS"],vcf["ALT"])
+        
+        start = float(vcf["POS"])
+        end = start + len(vcf["REF"])
+        fstart = start
+        fend = end
+        
+        print "[%s] (%s,%s)" % (vcf["Strain"],start,end)
+        f = lambda x: (fstart-joinDistance) <= x <= (fend + joinDistance)
+        g = lambda x: f(x[0]) or f(x[1])
+        matches = filter(g,vcfCollection.keys())
+        
+        result = {vcf["ID"]:vcf}
+        
+        while len(matches) > 0:
+            for loc in matches:
+                (istart,iend) = loc
+                if istart < fstart: fstart = istart
+                if iend < fend: fend = iend
+                vcfValues = vcfCollection[loc]
+                if vcfValues != None:
+                    result.update(vcfValues)
+                del vcfCollection[loc]
+            matches = filter(g,vcfCollection.keys())
+        iLoc = (fstart,fend)
+        vcfCollection[iLoc] = result                
+                
+    return vcfCollection
+
+def joinStrainVariants(vcfMasterReport,vcfCollection=None,joinDistance=50):
+    print "joining variants"
+    strainIDs = vcfMasterReport.keys()
+    vcfCollection = {}
+    for strainID in strainIDs:
+        vcfData = vcfMasterReport[strainID]
+        joinVariants(vcfData,vcfCollection=vcfCollection,strainID=strainID,joinDistance=joinDistance)
+    return vcfCollection
+
+def vcfCollectionReport(vcfCollection):
+    result = Report()
+    
+    for (loc,vcfs) in vcfCollection.items():
+        (start,end) = loc
+        if vcfs == None: continue
+        
+        result.add(loc,"position",start)
+        
+        row = {}
+        for (id,vcf) in vcfs.items():
+            strain = vcf["Strain"]
+            if strain not in row.keys():
+                row[strain] = ''
+            row[strain] = row[strain] + "(%s,%s,%s)" % (vcf["POS"],vcf["READS"],vcf["ALT"])
+        
+        result.add(loc,"count",len(row)) 
+        for (strain,variantString) in row.items():
+            result.add(loc,strain,variantString)
+          
+    return result
         
         
 def filterReadFile(fileName,output,headerRegx,dataRegx):
@@ -374,15 +381,18 @@ def buildVCF(workFolder,sampleCode,mode):
         
         return(bamFile,vcfFile)
 
-def vcfReport(vcfData, masterReport, refName='', minQuality = 30, minCount = 1):
+def vcfAnalysis(vcfData, samFile, strainID = '', refName='', minQuality = 30, minCount = 1):
+    vReport = Report()
     
     for vcf in vcfData:
+        vcf["STRAIN"] = strainID
         irefname = vcf["CHROM"]
         start = int(vcf["POS"])
         ref = vcf["REF"]
         alt = vcf["ALT"]
         quality = vcf["QUAL"]
         end = start + len(vcf)
+        vcf["END"] = end
         
         alreads = samFile.fetch(irefname,start,end)
         alreads = list(alreads)
@@ -396,26 +406,66 @@ def vcfReport(vcfData, masterReport, refName='', minQuality = 30, minCount = 1):
         if verbose: print "[%s]:(%s:%s)x[%s]=[%s] : [%s] ==> [%s]" % (irefname,start,end,rCount,quality,ref,alt)
         if irefname == '':
             irefname = refname
-         
-        vcReport.add(start,"end", end)
-        vcReport.add(start,"chrom",irefname)
-        vcReport.add(start,"strain",idCode)
-        vcReport.add(start,"ref",ref)
-        vcReport.add(start,"alt",alt)
-        vcReport.add(start,"count",rCount)
-        vcReport.add(start,"qual",quality)
         
-        vID = "%s_%s" % (pathCode,start)
-        masterReport.add(vID,"start", start)
-        masterReport.add(vID,"end", end)
-        masterReport.add(vID,"chrom",irefname)
-        masterReport.add(vID,"count",rCount)
-        masterReport.add(vID,"qual",quality)
-        masterReport.add(vID,"ref",ref)
-        masterReport.add(vID,"alt",alt)
+        vID = "%s_%s" % (strainID,start)
+        vReport.add(vID,"strainID", strainID)
+        vReport.add(vID,"start", start)
+        vReport.add(vID,"end", end)
+        vReport.add(vID,"chrom",irefname)
+        vReport.add(vID,"count",rCount)
+        vReport.add(vID,"qual",quality)
+        vReport.add(vID,"ref",ref)
+        vReport.add(vID,"alt",alt)
+        vReport.add(vID,"bamFile",bamFile)
+        vReport.add(vID,"bamFile",samFile)
     
-    return (vcfData, vcReport, masterReport)
+    return (vcfData, vReport)
 
+def oligoAlignmentAnalysis(oligoSeqFile,vcfFile,sampleCode):
+    
+    processVCF = ProcessVCF()
+    processVCF.blastTools = bTools
+    vcfAlignment = processVCF.alignVCF(oligoSeqFile,vcfFile,idTag=sampleCode)
+        
+    alignmentReport = Report()
+    alignmentLogFileName = workFolder + "%s.log" % (sampleCode)
+    logFile = open(alignmentLogFileName,"w")
+        
+    for (targetKey,alignment) in vcfAlignment.items():
+        if verbose: print "alignment [%s]" % (targetKey)
+            
+        name = alignment["name"]
+        irefname = alignment["chrom"]
+        quality = alignment["quality"]
+        start = alignment["start"]
+        end = alignment["end"]
+        subject = alignment["subject"]
+        query = alignment["query"]
+        refSeq = "%s" % alignment["refSeq"]
+        altRead = "%s" % alignment["alt-read"]
+            
+        if verbose: print "[%s]:%s:%s" % (irefname,start,end)
+        if irefname == '':
+            irefname = refname
+            
+        readList = []
+        alreads = samFile.fetch(irefname,start,end)
+        alreads = list(alreads)
+        alreadCount = len(alreads)
+        
+        if len(altRead.replace("_","")) != 0:
+            rTag = "%s_count[%s]_quality[%s]" % (targetKey,alreadCount,quality)
+            print rTag
+            logFile.write(">%s\n" % rTag)
+            logFile.write(subject+"[subject]\n") 
+            logFile.write(query+"[query]\n")
+            logFile.write(refSeq+"[refSeq]\n")
+            logFile.write(altRead+"[alt-read]\n")   
+        
+    logFile.close()
+    
+    return (alignmentReport,readList)
+    
 
 if __name__ == '__main__':
     
@@ -521,6 +571,7 @@ if __name__ == '__main__':
     currentPath = os.getcwd()
     pathRegex = '.*GEN([0-9].+)'
     match = re.match(pathRegex,currentPath)
+    
     if match == None:
         print "No match on regular expression [%s] in  [%s]" %(pathRegex, currentPath)
         pathCode = "Zero"
@@ -529,34 +580,46 @@ if __name__ == '__main__':
     if verbose: print "Path Code [%s]" % (pathCode)
     
     #File Names
+    varianceRepositoryFile = workFolder + "Variant_Repository.bac"
+    
     masterReportFile = workFolder + "Master_Report.csv"
     mReportFile = workFolder + "Master_Report.bac"
     varianceReportFile = workFolder + "Variance_Report.csv"
+    mVarianceLog = workFolder + "Master_Var.bac"
     
-    #variance tools.
+    #Strain Identifier
+    strainID = "%s_%s" % (sampleCode,pathCode)  
+    
+    #Variance Tools.
     sTools = VarianceTools()
     sTools.verbose = True
     sTools.refGenomeTag = refTag
     sTools.workingDir = workFolder
     sTools.refGenomeDir = genomeFolder
     sTools.refGenomeTag = refTag
+     
+    #========================
+    # Construct variant data
+    #======================== 
         
     if os.path.exists(mReportFile):
         mReportFh = open(mReportFile,"r")
         masterReport = pickle.load(mReportFh)
         mReportFh.close()
     else:
-        masterReport = Report()
-    
-    mVarianceLog = workFolder + "Master_Var.bac"
-    if os.path.exists(mVarianceLog):
-        tempFH = open(mVarianceLog,"r")
-        varCollection = pickle.load(tempFH)
-        tempFH.close()
-    else:
-        varCollection = {}    
+        masterReport = {}
         
-    if pathCode in masterReport.getColumnNames():
+    if os.path.exists(varianceRepositoryFile):
+        fh = open(varianceRepositoryFile,"r")
+        varRepository = pickle.load(fh)
+        fh.close()
+    else:
+        varRepository = {}        
+        
+    #if 'vcf' not in mode:
+    #if strainID in masterReport.getColumnNames()
+    #if ('vcf' not in mode) or (strainID in masterReport.keys() ):
+    if False:
         print "VCF already in Master Report"
     else:
         print "Process VCF to Report for sample code [%s]" % (sampleCode)
@@ -568,30 +631,50 @@ if __name__ == '__main__':
         refname = samFile.getrname(0)
             
         vcfData = parseVCF(vcfFile)
-        vcReport = Report()
         
         print "Building Variant information from VCF report"
-        (vcfData,vcfReport,masterReport) = vcfReport(vcfData=vcfData, masterReport=masterReport, refName=refname, minQuality=minQuality, minCount=minCount)
-
-        #Join variants that are close together
-        strainID = "%s_%s" % (sampleCode,pathCode)        
-        variantCollection = joinVariants(vcfData, joinDistance=100, vcfCollection=varCollection,strainID = strainID)
-        varGroupReport = vcfCollectionReport(varCollection)
+        strainID = "%s_%s" % (sampleCode,pathCode)     
+        (vcfData, vReport) = vcfAnalysis(vcfData=vcfData, samFile=samFile, strainID = strainID, refName=refname, minQuality=minQuality, minCount=minCount)
+        #masterReport.extend(vReport)
+        varRepository[strainID] = vcfData
+        masterReport[strainID] = vReport
         
+ 
         #Update data file of reported variants
         print "Building VCF master pickle %s" % (mReportFile)
         mReportFh = open(mReportFile,"w")
         pickle.dump(masterReport,mReportFh)
         mReportFh.close()
         
+        #Update data file of reported variants
+        print "Building VCF master pickle %s" % (varianceRepositoryFile)
+        FH = open(varianceRepositoryFile,"w")
+        pickle.dump(varRepository,FH)
+        FH.close()
+          
+    #if 'join' in mode:
+        
+        if os.path.exists(mVarianceLog):
+            tempFH = open(mVarianceLog,"r")
+            varCollection = pickle.load(tempFH)
+            tempFH.close()
+        else:
+            varCollection = {}   
+    
+        #Join variants that are close together
+        strainID = "%s_%s" % (sampleCode,pathCode)        
+        #variantCollection = joinVariants(vcfData, joinDistance=100, vcfCollection=varCollection,strainID = strainID)
+        varCollection = joinStrainVariants(varRepository, varCollection, joinDistance=100)
+        varGroupReport = vcfCollectionReport(varCollection)
+            
         #Update data file of joined variants
         print "Building Variance Collection %s" % (mVarianceLog)
         varFH = open(mVarianceLog,"w")
         pickle.dump(varCollection,varFH)
-        tempFH.close()
+        varFH.close()
         
-        #Write flat file of vcf master report and joined variant matrix
-        if "vReport" in mode:
+    #Write flat file of vcf master report and joined variant matrix
+    if "vReport" in mode:
             print "Building VCF Master Report"
             writer = ReportWriter()
             writer.setFile(masterReportFile)
@@ -605,48 +688,3 @@ if __name__ == '__main__':
             writer.closeFile()
     
     print "Done"
-    
-#Analysis of sections targeted for recombination.
-if False:
-    
-    processVCF = ProcessVCF()
-    processVCF.blastTools = bTools
-    vcfAlignment = processVCF.alignVCF(oligoSeqFile,vcfFile,idTag=sampleCode)
-        
-    alignmentReport = Report()
-    alignmentLogFileName = workFolder + "%s.log" % (sampleCode)
-    logFile = open(alignmentLogFileName,"w")
-        
-    for (targetKey,alignment) in vcfAlignment.items():
-        if verbose: print "alignment [%s]" % (targetKey)
-            
-        name = alignment["name"]
-        irefname = alignment["chrom"]
-        quality = alignment["quality"]
-        start = alignment["start"]
-        end = alignment["end"]
-        subject = alignment["subject"]
-        query = alignment["query"]
-        refSeq = "%s" % alignment["refSeq"]
-        altRead = "%s" % alignment["alt-read"]
-            
-        if verbose: print "[%s]:%s:%s" % (irefname,start,end)
-        if irefname == '':
-            irefname = refname
-            
-        readList = []
-        alreads = samFile.fetch(irefname,start,end)
-        alreads = list(alreads)
-        alreadCount = len(alreads)
-        
-        if len(altRead.replace("_","")) != 0:
-            rTag = "%s_count[%s]_quality[%s]" % (targetKey,alreadCount,quality)
-            print rTag
-            logFile.write(">%s\n" % rTag)
-            logFile.write(subject+"[subject]\n") 
-            logFile.write(query+"[query]\n")
-            logFile.write(refSeq+"[refSeq]\n")
-            logFile.write(altRead+"[alt-read]\n")   
-        
-    logFile.close()
-    print "done"   
