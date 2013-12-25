@@ -3,7 +3,7 @@
 # and metabolic data for engineered strains
 #-----------------------
 
-MetaboliteAnalysis <- function(varData,coverData,metData,metaboliteCols,minCoverage=100,
+MetaboliteAnalysis <- function(varData,coverData,metData,metaboliteCols,minCoverage=10,
                         seqIDCol="Seq.ID.1",varID="Row.Names"){
                             
 print("Starting Metabolic Analysis Version 1.0")
@@ -30,8 +30,10 @@ varRowNames = dimnames(varData)[[1]]
 varColumnNames = dimnames(varData)[[2]]
 
 #Set strain IDs as row names for metabolic data
-dimnames(metData)[[1]] = metData[,seqIDCol]
-print(c("metIDs",seqIDCol,metData[,seqIDCol]))
+metIDs =as.vector(metData[,seqIDCol])
+print(c("metIDs",seqIDCol,metIDs))
+dimnames(metData)[[1]] =metIDs
+
 
 result = c()
 for (metCol in metaboliteCols){
@@ -39,7 +41,7 @@ for (metCol in metaboliteCols){
     stats = c()
     
 	for (r in 1:length(varRowNames)){
-        print(c("Row",r))
+        #print(c("Row",r))
         
         activeVariants= varBinary[r,]
         coveredVariants = coverMask[r,]
@@ -57,8 +59,8 @@ for (metCol in metaboliteCols){
 		v2 = as.numeric(metData[n2,metCol])
 		v2 = v2[!is.na(v2)]
         
-        print(c("v1",v1))
-		print(c("v2",v2))
+        #print(c("v1",v1))
+		#print(c("v2",v2))
         
         if (length(v1) < 3 || length(v2) < 3){
 			stats = append(stats,NA)
