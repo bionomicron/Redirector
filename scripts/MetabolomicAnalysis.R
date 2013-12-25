@@ -4,48 +4,53 @@
 #-----------------------
 
 MetaboliteAnalysis <- function(varData,coverData,metData,metaboliteCols,minCoverage=100,
-                        seqIDCol="Sequencing.ID",varID="Row Names"){
+                        seqIDCol="Seq.ID.1",varID="Row.Names"){
                             
 print("Starting Metabolic Analysis Version 1.0")
 
 #replace row names with data from variant ID column
-vColID <- dimnames(varData)[[2] == varID
+vColID <- dimnames(varData)[[2]] == varID
 varDataRowIDs <- as.vector(varData[,vColID])
 varData <- varData[,!vColID]
-dimnames(varData)[[2]] <- varDataRowIDs
+dimnames(varData)[[1]] <- varDataRowIDs
+vOrder <- order(varDataRowIDs)
+varData <- varData[vOrder,]
 
-cColID = dimnames(coverData)[[2] == varID
-coverDataIDs <- as.vector(coverData[,cColID])
+cColID = dimnames(coverData)[[2]] == varID
+coverDataRowIDs <- as.vector(coverData[,cColID])
 coverData <- coverData[,!cColID]
-dimnames(coverData)[[2]] <- coverDataIDs
+dimnames(coverData)[[1]] <- coverDataRowIDs
+cOrder <- order(coverDataRowIDs)
+coverData <- coverData[cOrder,]
 
 varBinary <- varData != "N/A"
-coverMask <- coverData > minCoverData
+coverMask <- coverData > minCoverage
 
 varRowNames = dimnames(varData)[[1]]
 varColumnNames = dimnames(varData)[[2]]
 
 #Set strain IDs as row names for metabolic data
 dimnames(metData)[[1]] = metData[,seqIDCol]
+print(c("metIDs",seqIDCol,metData[,seqIDCol]))
 
 result = c()
 for (metCol in metaboliteCols){
-	stats = c()
 	print(c("Analysis of metabolite",metCol))
+    stats = c()
+    
 	for (r in 1:length(varRowNames)){
-		print(c("Row",r))
+        print(c("Row",r))
         
-		activeVar = varBinary[r,]
-        coveredVar = coverMask[r,]
+        activeVariants= varBinary[r,]
+        coveredVariants = coverMask[r,]
         
-        print(c("varBinary",activeVar))
-        print(c("coverMask",coveredVar))
+        activeVar <- activeVariants
+        activeVar[!coveredVariants] = NA
         
-        activeVar[!coverMask[]] = NA
+		x <- cbind(activeVariants,coveredVariants,activeVar)
+        #print(x)
         
-		print(c("activeVar",activeVar))
-        
-        n1 = varColumnNames[activeVar==T ]
+        n1 = varColumnNames[activeVar==T]
 		n2 = varColumnNames[activeVar==F]
 		v1 = as.numeric(metData[n1,metCol])
 		v1 = v1[!is.na(v1)]
@@ -54,7 +59,7 @@ for (metCol in metaboliteCols){
         
         print(c("v1",v1))
 		print(c("v2",v2))
-		
+        
         if (length(v1) < 3 || length(v2) < 3){
 			stats = append(stats,NA)
 		}
@@ -66,8 +71,6 @@ for (metCol in metaboliteCols){
 		}
 	}
 	result = cbind(result,stats)
-    
-	return(result)
 }
 
 dimnames(result)[[2]] = metaboliteCols
