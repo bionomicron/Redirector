@@ -243,8 +243,8 @@ def parseVCF(filename):
     @filename: String
     @result:[{vcf}]
     @summary:
-    parse VCF file to list of dicts
-    split alt sequences into seperate entries
+    parse VCF file to list of dictionaries
+    split alt sequences into separate entries
     '''
     
     header = ["#CHROM","POS","ID","REF","ALT","QUAL","FILTER","INFO","FORMAT","unknown"]
@@ -274,9 +274,13 @@ def parseVCFFile(filename):
         result[key] = d
     
     return result
-    
-def joinVariants(vcfData,vcfCollection={},strainID='None',joinDistance=50):
-    
+
+def findVariantRegions(vcfData,regions=[],strainID='',joinDistance=50,verbose=False):
+    '''
+    Build list of regions in which variants are found.
+    Used to build a set of Genome comparable regions.
+    Build regions by join close by locations of variants
+    '''
     for vcf in vcfData:
         vcf["Strain"] = strainID
         vcf["ID"] = (strainID,vcf["POS"],vcf["ALT"])
@@ -286,58 +290,132 @@ def joinVariants(vcfData,vcfCollection={},strainID='None',joinDistance=50):
         fstart = start
         fend = end
         
-        print "[%s] (%s,%s)" % (vcf["Strain"],start,end)
+        if verbose: print "[%s] (%s,%s)" % (vcf["Strain"],start,end)
         f = lambda x: (fstart-joinDistance) <= x <= (fend + joinDistance)
         g = lambda x: f(x[0]) or f(x[1])
-        matches = filter(g,vcfCollection.keys())
-        
-        result = {vcf["ID"]:vcf}
+        matches = filter(g,regions)
         
         while len(matches) > 0:
             for loc in matches:
                 (istart,iend) = loc
                 if istart < fstart: fstart = istart
-                if iend < fend: fend = iend
-                vcfValues = vcfCollection[loc]
-                if vcfValues != None:
-                    result.update(vcfValues)
-                del vcfCollection[loc]
-            matches = filter(g,vcfCollection.keys())
+                if iend > fend: fend = iend
+                regions.remove(loc)
+            matches = filter(g,regions)
         iLoc = (fstart,fend)
-        vcfCollection[iLoc] = result                
-                
-    return vcfCollection
-
-def joinStrainVariants(vcfMasterReport,vcfCollection=None,joinDistance=50):
-    print "joining variants"
-    strainIDs = vcfMasterReport.keys()
-    vcfCollection = {}
-    for strainID in strainIDs:
-        vcfData = vcfMasterReport[strainID]
-        joinVariants(vcfData,vcfCollection=vcfCollection,strainID=strainID,joinDistance=joinDistance)
-    return vcfCollection
-
-def vcfCollectionReport(vcfCollection):
-    result = Report()
+        regions.append(iLoc)  
+        
+    return regions              
+        
     
-    for (loc,vcfs) in vcfCollection.items():
-        (start,end) = loc
-        if vcfs == None: continue
+def joinVariants(vcfData,regions,samData,joinDistance=50,verbose=False):
+    '''
+    Take variant call data.
+    Sequencing source files.
+    Find out regions of variance.
+    Fill in variants in these regions as well as read depth.
+    '''
+    irefname = samData.getrname(0)
+    vcfRegions = {}
+    
+    for region in regions:
+        start = region[0]
+        end = region[1]
+    
+        alreads = samData.fetch(irefname,start,end)
+        alreads = list(alreads)
+        rCount = len(alreads)
+    
+        f = lambda x: (float(start) <= float(x["POS"]) <= float(end))
         
-        result.add(loc,"position",start)
+        matches = filter(f,vcfData)
+        l = len(matches)
+        if l > 1:
+            #print "[%s],(%s)" % (l,matches)
+            pass
+        vcfRegion = {"Count":rCount}
+        vcfRegion["vcfData"] = matches
+            
+        vcfRegions[region] = vcfRegion
         
-        row = {}
-        for (id,vcf) in vcfs.items():
-            strain = vcf["Strain"]
-            if strain not in row.keys():
-                row[strain] = ''
-            row[strain] = row[strain] + "(%s,%s,%s)" % (vcf["POS"],vcf["READS"],vcf["ALT"])
+    return vcfRegions
         
-        result.add(loc,"count",len(row)) 
-        for (strain,variantString) in row.items():
-            result.add(loc,strain,variantString)
-          
-    return result
+
+def joinStrainVariants(varianceData,joinDistance=50,verbose=False):
+    print "joining variants"
+    
+    strainIDs = varianceData.keys()
+    vcfCollection = {}
+    regions = []
+    for strainID in strainIDs:
+        vcfData = varianceData[strainID]["vcfData"] 
+        regions = findVariantRegions(vcfData, regions, strainID, joinDistance, verbose)
+        
+    for strainID in strainIDs:
+        vcfData = varianceData[strainID]["vcfData"]
+        bamFile = varianceData[strainID]["sourceFile"]
+        samData = pysam.Samfile(bamFile,"rb")
+        vcfRegions = joinVariants(vcfData,regions,samData,joinDistance=joinDistance)
+        vcfCollection[strainID] = vcfRegions
+    return vcfCollection
+
+def vcfCollectionReport(vcfCollection,vcf,reorder=True,useCount=True):
+    result = Report()
+    coverageReport = Report()
+    data = vcfCollection.items()
+    data.sort()
+    
+    for (strainID,vcfRegions) in vcfCollection.items():
+        for (loc,vcfRegion) in vcfRegions.items():
+
+            count = vcfRegion["Count"]
+            vcfData = vcfRegion['vcfData']
+            item = "[%s]:" % (count)
+            coverageReport.add(loc,strainID,count)
+                
+            for vcf in vcfData:
+                item = item + "(%s,%s,%s)" % (vcf["POS"],vcf["READS"],vcf["ALT"])
+            if len(vcfData) != 0:
+                result.add(loc,strainID,item)
+
+            if useCount:
+                if result.getElement(loc,"Region_Count") == None:
+                    result.add(loc,"Region_Count",0)
+                    rCount = 0
+                else:
+                    rCount = result.getElement(loc,"Region_Count")
+                    rCount = float(rCount)
+                    
+                if len(vcfData) != 0:
+                    rCount += 1
+                    result.add(loc,"Region_Count",rCount)    
+                    
+    if reorder:
+        columnNames = result.getColumnNames()
+        cmap = {}
+        regex = ".*_([0-9]+).*"
+        for cName in columnNames:
+            match = re.match(regex,cName)
+            if match != None:
+                key = match.group(1)
+            else:
+                key = cName
+            cmap[key] = cName
+        keys = cmap.keys()
+        keys.sort()
+        
+        iresult = Report()
+        icoverage = Report()
+        for key in keys:
+            cName = cmap[key]
+            vData = result.getColumn(cName)
+            iresult.addColumnHash(cName, vData)
+            cData = coverageReport.getColumn(cName)
+            icoverage.addColumnHash(cName,cData)
+        result = iresult
+        coverageReport = icoverage
+        
+    return (result,coverageReport)
         
         
 def filterReadFile(fileName,output,headerRegx,dataRegx):
@@ -366,13 +444,13 @@ def buildVCF(workFolder,sampleCode,mode):
         bamFile = workFolder + "%s_s.bam" % (sampleCode)
         vcfFile = workFolder + "%s.vcf" % (sampleCode)
         
-        if not os.path.exists(bamFile) or "rebuild" in mode:
+        if not os.path.exists(bamFile) or "rebuild2" in mode:
             print "Building bam file %s" % (bamFile)
             (id,dID,bamFile) = sTools.samProcessRead(readFile1,readFile2,idTag=sampleCode)
         else:
             print "%s found" % (bamFile)
                         
-        if not os.path.exists(vcfFile) or "rebuild" in mode:
+        if not os.path.exists(vcfFile) or "rebuild2" in mode:
         #if True:
             print "Building vcf file %s" % (vcfFile)    
             vcfFile = sTools.vcfProcess(bamFile, idTag = sampleCode)
@@ -381,8 +459,12 @@ def buildVCF(workFolder,sampleCode,mode):
         
         return(bamFile,vcfFile)
 
-def vcfAnalysis(vcfData, samFile, strainID = '', refName='', minQuality = 30, minCount = 1):
+def vcfAnalysis(vcfData, bamFileName, strainID = '', refName='', minQuality = 30, minCount = 1):
     vReport = Report()
+    
+    print "Opening bam file [%s]" % (bamFileName)
+    samFile = pysam.Samfile(bamFile,"rb")
+    refname = samFile.getrname(0)
     
     for vcf in vcfData:
         vcf["STRAIN"] = strainID
@@ -399,11 +481,12 @@ def vcfAnalysis(vcfData, samFile, strainID = '', refName='', minQuality = 30, mi
         rCount = len(alreads)
         
         vcf["READS"] = rCount
+        vcf["READFILE"] = bamFileName
         
         if float(quality < minQuality) or rCount < minCount:
             continue
         
-        if verbose: print "[%s]:(%s:%s)x[%s]=[%s] : [%s] ==> [%s]" % (irefname,start,end,rCount,quality,ref,alt)
+        #if verbose: print "[%s]:(%s:%s)x[%s]=[%s] : [%s] ==> [%s]" % (irefname,start,end,rCount,quality,ref,alt)
         if irefname == '':
             irefname = refname
         
@@ -524,6 +607,12 @@ if __name__ == '__main__':
                       default=None,
                       metavar="File",
                       help="readTag for first paired end read")
+    
+    parser.add_option("--nameTag", 
+                      dest="nameTag", 
+                      default='',
+                      metavar="String",
+                      help="Name tag to track analysis by")
 
 
     (options,args) = parser.parse_args()
@@ -574,18 +663,21 @@ if __name__ == '__main__':
     
     if match == None:
         print "No match on regular expression [%s] in  [%s]" %(pathRegex, currentPath)
-        pathCode = "Zero"
+        pathCode = "000"
     else:
         pathCode = match.group(1)
     if verbose: print "Path Code [%s]" % (pathCode)
     
-    #File Names
-    varianceRepositoryFile = workFolder + "Variant_Repository.bac"
+    analysisName = options.nameTag
     
-    masterReportFile = workFolder + "Master_Report.csv"
-    mReportFile = workFolder + "Master_Report.bac"
-    varianceReportFile = workFolder + "Variance_Report.csv"
-    mVarianceLog = workFolder + "Master_Var.bac"
+    #File Names
+    varianceRepositoryFile = workFolder + "Variant_%s_Repository.bac" % (analysisName)
+    
+    masterReportFile = workFolder + "Master_%s_Report.txt" % (analysisName)
+    mReportFile = workFolder + "Master_%s_Report.bac" % (analysisName)
+    varianceReportFile = workFolder + "Variance_%s_Report.txt" % (analysisName)
+    coverageReportFile = workFolder + "Coverage_%s_Report.txt" % (analysisName)
+    mVarianceLog = workFolder + "Master_%s_Var.bac" % (analysisName)
     
     #Strain Identifier
     strainID = "%s_%s" % (sampleCode,pathCode)  
@@ -602,26 +694,21 @@ if __name__ == '__main__':
     # Construct variant data
     #======================== 
         
-    if os.path.exists(mReportFile):
+    if os.path.exists(mReportFile) and 'rebuild' not in mode:
         mReportFh = open(mReportFile,"r")
         masterReport = pickle.load(mReportFh)
         mReportFh.close()
     else:
-        masterReport = {}
+        masterReport = Report()
         
-    if os.path.exists(varianceRepositoryFile):
+    if os.path.exists(varianceRepositoryFile) and 'rebuild' not in mode:
         fh = open(varianceRepositoryFile,"r")
         varRepository = pickle.load(fh)
         fh.close()
     else:
-        varRepository = {}        
+        varRepository = {}    
         
-    #if 'vcf' not in mode:
-    #if strainID in masterReport.getColumnNames()
-    #if ('vcf' not in mode) or (strainID in masterReport.keys() ):
-    if False:
-        print "VCF already in Master Report"
-    else:
+    if strainID not in varRepository.keys() or 'vcf' in mode:
         print "Process VCF to Report for sample code [%s]" % (sampleCode)
         
         (bamFile,vcfFile) = buildVCF(workFolder, sampleCode, mode)
@@ -634,11 +721,14 @@ if __name__ == '__main__':
         
         print "Building Variant information from VCF report"
         strainID = "%s_%s" % (sampleCode,pathCode)     
-        (vcfData, vReport) = vcfAnalysis(vcfData=vcfData, samFile=samFile, strainID = strainID, refName=refname, minQuality=minQuality, minCount=minCount)
-        #masterReport.extend(vReport)
-        varRepository[strainID] = vcfData
-        masterReport[strainID] = vReport
+        (vcfData, vReport) = vcfAnalysis(vcfData=vcfData, bamFileName=bamFile, strainID = strainID, refName=refname, minQuality=minQuality, minCount=minCount)
+        masterReport.extend(vReport)
         
+        #Fill repository
+        if strainID not in varRepository.keys():
+            varRepository[strainID] = {}
+        varRepository[strainID]["vcfData"] = vcfData
+        varRepository[strainID]["sourceFile"] = bamFile
  
         #Update data file of reported variants
         print "Building VCF master pickle %s" % (mReportFile)
@@ -646,26 +736,25 @@ if __name__ == '__main__':
         pickle.dump(masterReport,mReportFh)
         mReportFh.close()
         
-        #Update data file of reported variants
+        #Update repository of variants
         print "Building VCF master pickle %s" % (varianceRepositoryFile)
         FH = open(varianceRepositoryFile,"w")
         pickle.dump(varRepository,FH)
         FH.close()
-          
-    #if 'join' in mode:
         
-        if os.path.exists(mVarianceLog):
-            tempFH = open(mVarianceLog,"r")
-            varCollection = pickle.load(tempFH)
-            tempFH.close()
-        else:
-            varCollection = {}   
-    
+        if "report" in mode:
+            print "Building VCF Master Report"
+            writer = ReportWriter()
+            writer.setFile(masterReportFile)
+            writer.write(masterReport)
+            writer.closeFile()
+          
+    if 'join' in mode:
+            
         #Join variants that are close together
-        strainID = "%s_%s" % (sampleCode,pathCode)        
-        #variantCollection = joinVariants(vcfData, joinDistance=100, vcfCollection=varCollection,strainID = strainID)
-        varCollection = joinStrainVariants(varRepository, varCollection, joinDistance=100)
-        varGroupReport = vcfCollectionReport(varCollection)
+        strainID = "%s_%s" % (sampleCode,pathCode)
+        varCollection = joinStrainVariants(varRepository, joinDistance=100)
+        (varianceReport, coverageReport) = vcfCollectionReport(varCollection,varRepository)
             
         #Update data file of joined variants
         print "Building Variance Collection %s" % (mVarianceLog)
@@ -673,18 +762,19 @@ if __name__ == '__main__':
         pickle.dump(varCollection,varFH)
         varFH.close()
         
-    #Write flat file of vcf master report and joined variant matrix
-    if "vReport" in mode:
-            print "Building VCF Master Report"
-            writer = ReportWriter()
-            writer.setFile(masterReportFile)
-            writer.write(masterReport)
-            writer.closeFile()
-            
-            print "Building Variance Array"
+        #Write flat file of vcf master report and joined variant matrix
+        if "report" in mode:
+            print "Writing Variance Regions Report [%s]" % (varianceReportFile)
             writer = ReportWriter()
             writer.setFile(varianceReportFile)
-            writer.write(varGroupReport)
+            writer.write(varianceReport)
             writer.closeFile()
+            
+            print "Writing Variance Coverage Report [%s]" % (coverageReportFile)
+            writer = ReportWriter()
+            writer.setFile(coverageReportFile)
+            writer.write(coverageReport)
+            writer.closeFile()
+            
     
     print "Done"
