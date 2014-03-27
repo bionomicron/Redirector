@@ -66,6 +66,7 @@ class VarianceTools:
             if self.verbose: print "building reference index found %s" % (drefTag)
         
         if self.verbose: print ">aligning sequences to reference"
+        #try BWA script.
         call = "bowtie2 -q -p 4 -k 3 --local %s -1 %s -2 %s -S %s.sam" % (drefTag,r1,r2,dIdTag)
         if self.verbose: print "executing command: [%s]" % call
         subprocess.call(call,shell=True)
@@ -275,6 +276,58 @@ def parseVCFFile(filename):
     
     return result
 
+def getVariantRegions(vcfData,strainID,verbose=False):
+    regions = []
+    
+    for vcf in vcfData:
+        vcf["Strain"] = strainID
+        vcf["ID"] = (strainID,vcf["POS"],vcf["ALT"])
+        
+        start = float(vcf["POS"])
+        end = start + len(vcf["REF"])
+        fstart = start
+        fend = end
+        
+        if verbose: print "[%s] (%s,%s)" % (vcf["Strain"],start,end)
+        regions.append((fstart,fend))
+        
+    return regions
+
+def filterRegions(regions,start,end,joinDistance):
+        f = lambda x: (start-joinDistance) <= x <= (end + joinDistance)
+        g = lambda x: f(x[0]) or f(x[1])
+        matches = filter(g,regions)
+        return matches
+
+def joinVariantRegions(regions,joinDistance=50,verbose=False):
+    regions.sort()
+    
+    for region in regions:
+        fstart = region[0]
+        fend = region[1]
+        
+        matches = filterRegions(regions,fstart,fend,joinDistance)
+        
+        if len(matches) == 1: continue
+        
+        if verbose: print "region matches [%s]" % (len(matches))
+        
+        while len(matches) > 0:
+            locations = []
+            for loc in matches:
+                locations.extend(loc)
+                regions.remove(loc)
+            fstart = min(locations)
+            fend = max(locations)
+            matches = filterRegions(regions,fstart,fend,joinDistance)
+            
+        iLoc = (fstart,fend)
+        regions.append(iLoc)
+        
+        if verbose: print "final region (%s,%s)" % (fstart,fend)
+        
+    return regions
+
 def findVariantRegions(vcfData,regions=[],strainID='',joinDistance=50,verbose=False):
     '''
     Build list of regions in which variants are found.
@@ -307,16 +360,15 @@ def findVariantRegions(vcfData,regions=[],strainID='',joinDistance=50,verbose=Fa
         
     return regions              
         
-    
-def joinVariants(vcfData,regions,samData,joinDistance=50,verbose=False):
+def joinVariants(vcfData,regions,samData,verbose=False):
     '''
-    Take variant call data.
-    Sequencing source files.
-    Find out regions of variance.
-    Fill in variants in these regions as well as read depth.
+    Take selected regions of genome
+    Group variants in selected regions
+    Return region grouped variants.
     '''
     irefname = samData.getrname(0)
     vcfRegions = {}
+    
     
     for region in regions:
         start = region[0]
@@ -342,21 +394,33 @@ def joinVariants(vcfData,regions,samData,joinDistance=50,verbose=False):
         
 
 def joinStrainVariants(varianceData,joinDistance=50,verbose=False):
+    '''
+    Merge near by variants into variant regions for better analysis
+    
+    '''
     print "joining variants"
     
     strainIDs = varianceData.keys()
     vcfCollection = {}
     regions = []
+    
     for strainID in strainIDs:
         vcfData = varianceData[strainID]["vcfData"] 
-        regions = findVariantRegions(vcfData, regions, strainID, joinDistance, verbose)
+        #regions = findVariantRegions(vcfData, regions, strainID, joinDistance, verbose)
+        iregions = getVariantRegions(vcfData, strainID, verbose)
+        regions.extend(iregions)
+        
+    regions = joinVariantRegions(regions, joinDistance, verbose=True)
         
     for strainID in strainIDs:
+        print "Joining variants for [%s]" % (strainID)
         vcfData = varianceData[strainID]["vcfData"]
         bamFile = varianceData[strainID]["sourceFile"]
         samData = pysam.Samfile(bamFile,"rb")
-        vcfRegions = joinVariants(vcfData,regions,samData,joinDistance=joinDistance)
+        vcfRegions = joinVariants(vcfData,regions,samData)
         vcfCollection[strainID] = vcfRegions
+        
+    print "Variant report complete"
     return vcfCollection
 
 def vcfCollectionReport(vcfCollection,vcf,reorder=True,useCount=True):
@@ -365,7 +429,34 @@ def vcfCollectionReport(vcfCollection,vcf,reorder=True,useCount=True):
     data = vcfCollection.items()
     data.sort()
     
+    strainIDs = vcfCollection.keys()
+    #sort strain IDs
+    
+    if reorder:
+        print "reordering report"
+        columnNames = strainIDs
+        cmap = {}
+        regex = ".*_([0-9]+).*"
+        for cName in columnNames:
+            match = re.match(regex,cName)
+            if match != None:
+                key = match.group(1)
+            else:
+                key = cName
+            cmap[key] = cName
+        strainKeys = cmap.keys()
+        strainKeys.sort()
+    
+        index=1
+        for strainKey in strainKeys:
+            strainID = cmap[strainKey]
+            result.add("order",strainID,index)
+            coverageReport.add("order",strainID,index)
+            index += 1
+        
+    
     for (strainID,vcfRegions) in vcfCollection.items():
+        print "Collecting [%s] regions" % (strainID)
         for (loc,vcfRegion) in vcfRegions.items():
 
             count = vcfRegion["Count"]
@@ -389,8 +480,11 @@ def vcfCollectionReport(vcfCollection,vcf,reorder=True,useCount=True):
                 if len(vcfData) != 0:
                     rCount += 1
                     result.add(loc,"Region_Count",rCount)    
-                    
-    if reorder:
+    
+    #Slated for removal after testing new method of insuring report order.                
+    if False:
+    #if reorder:
+        print "reordering report"
         columnNames = result.getColumnNames()
         cmap = {}
         regex = ".*_([0-9]+).*"
@@ -407,6 +501,7 @@ def vcfCollectionReport(vcfCollection,vcf,reorder=True,useCount=True):
         iresult = Report()
         icoverage = Report()
         for key in keys:
+            print "adding strain [%s]" % (key)
             cName = cmap[key]
             vData = result.getColumn(cName)
             iresult.addColumnHash(cName, vData)
@@ -441,23 +536,23 @@ def filterReadFile(fileName,output,headerRegx,dataRegx):
 
 def buildVCF(workFolder,sampleCode,mode):
         
-        bamFile = workFolder + "%s_s.bam" % (sampleCode)
-        vcfFile = workFolder + "%s.vcf" % (sampleCode)
+    bamFile = workFolder + "%s_s.bam" % (sampleCode)
+    vcfFile = workFolder + "%s.vcf" % (sampleCode)
         
-        if not os.path.exists(bamFile) or "rebuild2" in mode:
-            print "Building bam file %s" % (bamFile)
-            (id,dID,bamFile) = sTools.samProcessRead(readFile1,readFile2,idTag=sampleCode)
-        else:
-            print "%s found" % (bamFile)
+    if not os.path.exists(bamFile) or "rebuild2" in mode:
+        print "Building bam file %s" % (bamFile)
+        (id,dID,bamFile) = sTools.samProcessRead(readFile1,readFile2,idTag=sampleCode)
+    else:
+        print "%s found" % (bamFile)
                         
-        if not os.path.exists(vcfFile) or "rebuild2" in mode:
-        #if True:
-            print "Building vcf file %s" % (vcfFile)    
-            vcfFile = sTools.vcfProcess(bamFile, idTag = sampleCode)
-        else:
-            print "%s found" % (vcfFile)
+    if not os.path.exists(vcfFile) or "rebuild2" in mode:
+    #if True:
+        print "Building vcf file %s" % (vcfFile)    
+        vcfFile = sTools.vcfProcess(bamFile, idTag = sampleCode)
+    else:
+        print "%s found" % (vcfFile)
         
-        return(bamFile,vcfFile)
+    return(bamFile,vcfFile)
 
 def vcfAnalysis(vcfData, bamFileName, strainID = '', refName='', minQuality = 30, minCount = 1):
     vReport = Report()
@@ -753,7 +848,9 @@ if __name__ == '__main__':
             
         #Join variants that are close together
         strainID = "%s_%s" % (sampleCode,pathCode)
-        varCollection = joinStrainVariants(varRepository, joinDistance=100)
+        print "Joining strain variants"
+        varCollection = joinStrainVariants(varRepository, joinDistance=20)
+        print"Building collection report"
         (varianceReport, coverageReport) = vcfCollectionReport(varCollection,varRepository)
             
         #Update data file of joined variants

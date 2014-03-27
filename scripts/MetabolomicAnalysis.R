@@ -4,7 +4,7 @@
 #-----------------------
 
 MetaboliteAnalysis <- function(varData,coverData,metData,metaboliteCols,minCoverage=10,
-                        seqIDCol="Seq.ID.1",varID="Row.Names"){
+                        seqIDCol="Seq.1.ID",varID="Row.Names"){
                             
 print("Starting Metabolic Analysis Version 1.0")
 

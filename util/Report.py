@@ -180,19 +180,58 @@ class ReportWriter(BasicWriter):
             self.writeLineArray(nameArray)
         
 
+from util.FlatFileParser import FlatFileParser
+from optparse import OptionParser
+from time import time,strftime
+    
+if __name__ == '__main__':
+    parser = OptionParser()
+    parser.add_option("-v", "--verbose", action="store_true", dest="verbose", default=False, help="set verbose mode")
+    parser.add_option("-f", "--file", dest="input_file", default=None, help="test input file")
+    parser.add_option("-o", "--output", dest="output_file", default=None, help="test output file")
+    (options,args) = parser.parse_args()  
+    
+    input_file = options.input_file
+    output_file = options.output_file
+    
+    input_file = 'Variance__Report.txt'
+    input_file = 'Variance_FC_00707_Report.txt'
+    output_file = 'Original_Report_out_test.txt'
+    
+    print "Reading report file [%s]" %(input_file)
+    s_read_time = time()    
+    reader = FlatFileParser()
+    report = reader.parseToReport(input_file, keyTag='', header=None, unique=True)
+    e_read_time = time() - s_read_time
+    print "Reading time [%s]" %(e_read_time)
+    
+    new_report = Report()
+    
+    c_names = report.getColumnNames()
+    r_names = report.getRowNames()
+    s_reload_time = time()
+    for r_name in r_names:
+        print "reloading [%s]" % (r_name)
+        for c_name in c_names:
+            value = report.getElement(r_name, c_name)
+            if value != None:
+                new_report.addElement(r_name, c_name, value)
+                
+    e_reload_time = time() - s_reload_time
+    print "reload time [%s]" % (e_reload_time)
+    
+    
+    s_write_time = time()
+    writer = ReportWriter()
+    print "Writing report to [%s]" % (output_file)
+    writer = ReportWriter()
+    writer.setFile(output_file)
+    writer.write(new_report) 
+    writer.closeFile()
+    e_write_time = time() - s_write_time
+    print "Writing time [%s]" % (e_write_time)
             
-if __name__=='__main__':
-    hash = {"sad":"happy","mad":"calm"}
-    stuff = Report()
-    stuff.addReportColumnHash("nerd",hash)
-    hash2 = {"sad":"crabby","crazy":"cool",}
-    hash3 = {"bad":"foolish","great":"hysterical"}
-    stuff.addReportColumnHash("loop", hash2)
-    stuff.addReportColumnHash("please", hash3)
-    print stuff.returnColumnNames()
-    print stuff.returnRowNames()
-    print stuff.returnRowArray("mad")
-    print stuff.returnRowArray("sad")
+    
     
 
     
