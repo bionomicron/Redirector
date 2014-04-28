@@ -5,18 +5,13 @@ Created on Mar 21, 2014
 '''
 
 import collections
+import csv
 
-class FastReport(object):
+class DataReport:
     '''
-    2 Dimensional flat file data holding object.
-    +Trying to improve access and size, arrays for each row indexed to a column map.
-    -This may make adding data by columns slow.
-    '''
-
+    Tries to have extension and checks for missing row / column keys'''
+    
     def __init__(self,column_names=[]):
-        '''
-        Constructor
-        '''
         self._column_map = collections.OrderedDict()
         self._data = {} #map from row to array of values
         self._extendColumns(column_names)
@@ -24,52 +19,40 @@ class FastReport(object):
     def _extendColumns(self,names=[]):
         for name in names:
             if name not in self._column_map.keys():
-                self._column_map[name] = len(self._column_map)
-                   
-    def getRowNames(self):
-        return self._data.keys()
-    
-    def getColumnNames(self):
-        return self._column_map.keys()
-        
-    def get(self, row_name='', column_name=''):
-        return self._data[row_name][self._column_map[column_name]]
-
-    def add(self, row_name, column_name, value):
-        if not row_name in self._data:
-            self._data[row_name] = [None] * len(self._column_map)
-        self._data[row_name][self._column_map[column_name]] = value
-        
-class SafeReport(FastReport):
-    '''
-    Tries to have extension and checks for missing row / column keys
-    '''
+                self._column_map[name] = len(self._column_map)    
     
     def _updateRow(self,row_name):
-        length_diff = len(self._column_map) - len(self._data[row_name])
-        if length_diff > 0:
-            self._data[row_name].append([None]*length_diff)    
+        if not row_name in self._data:
+            self._data[row_name] = [None] * len(self._column_map)
+        else:
+            length_diff = len(self._column_map) - len(self._data[row_name])
+            if length_diff > 0:
+                self._data[row_name].extend([None]*length_diff)    
     
     def _updateReport(self):
         for row_name in self._data.keys():
-            self.updateRow(row_name)    
+            self._updateRow(row_name)    
     
     def add(self, row_name, column_name, value):
-        self._extendColumns([column_name])
-        
-        if not row_name in self._data:
-            self._data[row_name] = [None] * len(self._column_map)
-        
-        self._updateRow(row_name)
-
-        self._data[row_name][self._column_map[column_name]] = value
+        try:
+            self._extendColumns([column_name])
+            self._updateRow(row_name)
+            self._data[row_name][self._column_map[column_name]] = value
+        except:
+            if column_name in self._column_map.keys():
+                print "Column in Map index [%s]" % self._column_map[column_name]
+                print "Data Row %s" % (self._data[row_name])
+            else:
+                print "Column not in Map"
+            print "Column Map [%s]" % (self._column_map)
+            print "Adding [%s,%s,%s])" % (row_name,column_name,value)
+            raise
  
     def get(self, row_name, column_name):
-        if row_name not in self._data.keys() or column_name not in self._column_map.keys():
+        if row_name not in self._data or column_name not in self._column_map:
             return None
         
-        self._updateRow(row_name)
-        
+        self._updateRow(row_name)        
         return self._data[row_name][self._column_map[column_name]]
 
     def getColumnNames(self):
@@ -78,32 +61,30 @@ class SafeReport(FastReport):
     def getRowNames(self):
         return self._data.keys()
     
-    def addRow(self,row_name,values={}):
+    def addRow(self, row_name, values={}):
         '''
         Safe but slow addition of row to report
         '''
-        for (column_name,value) in values:
-            self.add(row_name,column_name,value)
+        for (column_name, value) in values:
+            self.add(row_name, column_name, value)
     
-    def addColumn(self,column_name,values={}):
+    def addColumn(self, column_name, values={}):
         '''
         Safe but slow addition of column to report
         '''
-        for (row_name,value) in values:
-            self.add(row_name,column_name,value)
+        for (row_name, value) in values:
+            self.add(row_name, column_name, value)
     
-    def extend(self,report):
+    def extend(self, report):
         '''
         Safe but slow extension of report
         '''
         self._extendColumns(report._column_map.keys())
-        for (row_name,values) in report._data.keys():
-            for (column_name,col_index) in report._column_map.items():
+        for (row_name, values) in report._data.items():
+            for (column_name, col_index) in report._column_map.items():
                 if values[col_index] != None:
-                    self.add(row_name,column_name,values[col_index])
-        return None 
-    
-import csv
+                    self.add(row_name, column_name, values[col_index])
+        return None
     
 class DataReportIO:
     
@@ -113,10 +94,11 @@ class DataReportIO:
     def _check_header(self,header):
         pass
     
-    def readReport(self,file_name,key_column,delimiter="\t",quotechar="'"):
-        result = SafeReport()
+    def readReport(self,file_name, key_column, **kwargs):
+        '''kwargs are provided to csv.reader'''
+        result = DataReport()
         with open(file_name, 'rb') as csvfile:
-            reader = csv.reader(csvfile, delimiter=delimiter, quotechar=quotechar)
+            reader = csv.reader(csvfile, **kwargs)
             row = reader.next()
             result._extendColumns(row)
             
@@ -131,20 +113,21 @@ class DataReportIO:
         
         return result
     
-    def writeReport(self,report,file_name,delimiter='\t',quotechar="'"):
-        
+    def writeReport(self,report,file_name, **kwargs):
+        '''kwargs are provided to csv.writer'''
         with open(file_name,'wb') as fh:
-            writer = csv.writer(fh, delimiter=delimiter,quotechar=delimiter, quoting=csv.QUOTE_MINIMAL)
-            header = report.getColumnNames()
+            writer = csv.writer(fh, quoting=csv.QUOTE_MINIMAL, **kwargs)
+            header = ["row_name"] + report.getColumnNames()
             writer.writerow(header)
             for row_name in report.getRowNames():
-                row = report._data[row_name]
+                row = [row_name] + report._data[row_name]
                 writer.writerow(row)
     
-from optparse import OptionParser
-from time import time,strftime
     
 if __name__ == '__main__':
+    from optparse import OptionParser
+    from time import time,strftime
+
     parser = OptionParser()
     parser.add_option("-v", "--verbose", action="store_true", dest="verbose", default=False, help="set verbose mode")
     parser.add_option("-f", "--file", dest="input_file", default=None, help="test input file")
@@ -169,10 +152,9 @@ if __name__ == '__main__':
     print "Reloading the data into a new Report size rows [%s] x columns [%s]" % (len(row_names),len(column_names))
     
     start_fill_time = time()
-    new_report = SafeReport()
+    new_report = DataReport()
     row_index = 0
     for r_name in row_names:
-        #print"row index [%s]" % (row_index)
         row_index += 1
         
         for c_name in column_names:

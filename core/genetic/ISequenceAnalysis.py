@@ -9,9 +9,8 @@ Created on Aug 11, 2013
 
 from util.Config import ReflectionConfig 
 from core.genetic.SequenceTools import BlastTools
-from util.Report import Report
-from util.ReportWriter import ReportWriter
 from util.FlatFileParser import FlatFileParser
+from util.DataReport import DataReport, DataReportIO
 
 from Bio.Seq import Seq
 from Bio import Entrez,SeqIO
@@ -56,6 +55,7 @@ class VarianceTools:
         drefTag = self.refGenomeDir + self.refGenomeTag
         dIdTag = self.workingDir + idTag
         
+        print "Analysis tools must be in current path [%s]" % os.path.expandvars("$PATH")
         if not os.path.exists("%s.1.bt2" % drefTag):
         #if True:
             print "building reference index"
@@ -310,7 +310,7 @@ def joinVariantRegions(regions,joinDistance=50,verbose=False):
         
         if len(matches) == 1: continue
         
-        if verbose: print "region matches [%s]" % (len(matches))
+        #if verbose: print "region matches [%s]" % (len(matches))
         
         while len(matches) > 0:
             locations = []
@@ -324,7 +324,7 @@ def joinVariantRegions(regions,joinDistance=50,verbose=False):
         iLoc = (fstart,fend)
         regions.append(iLoc)
         
-        if verbose: print "final region (%s,%s)" % (fstart,fend)
+        #if verbose: print "final region (%s,%s)" % (fstart,fend)
         
     return regions
 
@@ -392,11 +392,9 @@ def joinVariants(vcfData,regions,samData,verbose=False):
         
     return vcfRegions
         
-
 def joinStrainVariants(varianceData,joinDistance=50,verbose=False):
     '''
     Merge near by variants into variant regions for better analysis
-    
     '''
     print "joining variants"
     
@@ -424,8 +422,8 @@ def joinStrainVariants(varianceData,joinDistance=50,verbose=False):
     return vcfCollection
 
 def vcfCollectionReport(vcfCollection,vcf,reorder=True,useCount=True):
-    result = Report()
-    coverageReport = Report()
+    result = DataReport()
+    coverageReport = DataReport()
     data = vcfCollection.items()
     data.sort()
     
@@ -447,14 +445,6 @@ def vcfCollectionReport(vcfCollection,vcf,reorder=True,useCount=True):
         strainKeys = cmap.keys()
         strainKeys.sort()
     
-        index=1
-        for strainKey in strainKeys:
-            strainID = cmap[strainKey]
-            result.add("order",strainID,index)
-            coverageReport.add("order",strainID,index)
-            index += 1
-        
-    
     for (strainID,vcfRegions) in vcfCollection.items():
         print "Collecting [%s] regions" % (strainID)
         for (loc,vcfRegion) in vcfRegions.items():
@@ -470,45 +460,16 @@ def vcfCollectionReport(vcfCollection,vcf,reorder=True,useCount=True):
                 result.add(loc,strainID,item)
 
             if useCount:
-                if result.getElement(loc,"Region_Count") == None:
+                if result.get(loc,"Region_Count") == None:
                     result.add(loc,"Region_Count",0)
                     rCount = 0
                 else:
-                    rCount = result.getElement(loc,"Region_Count")
+                    rCount = result.get(loc,"Region_Count")
                     rCount = float(rCount)
                     
                 if len(vcfData) != 0:
                     rCount += 1
                     result.add(loc,"Region_Count",rCount)    
-    
-    #Slated for removal after testing new method of insuring report order.                
-    if False:
-    #if reorder:
-        print "reordering report"
-        columnNames = result.getColumnNames()
-        cmap = {}
-        regex = ".*_([0-9]+).*"
-        for cName in columnNames:
-            match = re.match(regex,cName)
-            if match != None:
-                key = match.group(1)
-            else:
-                key = cName
-            cmap[key] = cName
-        keys = cmap.keys()
-        keys.sort()
-        
-        iresult = Report()
-        icoverage = Report()
-        for key in keys:
-            print "adding strain [%s]" % (key)
-            cName = cmap[key]
-            vData = result.getColumn(cName)
-            iresult.addColumnHash(cName, vData)
-            cData = coverageReport.getColumn(cName)
-            icoverage.addColumnHash(cName,cData)
-        result = iresult
-        coverageReport = icoverage
         
     return (result,coverageReport)
         
@@ -535,7 +496,9 @@ def filterReadFile(fileName,output,headerRegx,dataRegx):
     return True
 
 def buildVCF(workFolder,sampleCode,mode):
-        
+    #bamFileName = "%s_s.bam" % (sampleCode)
+    #vcfFileName = "%s.vcf" % (sampleCode)
+    
     bamFile = workFolder + "%s_s.bam" % (sampleCode)
     vcfFile = workFolder + "%s.vcf" % (sampleCode)
         
@@ -554,8 +517,10 @@ def buildVCF(workFolder,sampleCode,mode):
         
     return(bamFile,vcfFile)
 
-def vcfAnalysis(vcfData, bamFileName, strainID = '', refName='', minQuality = 30, minCount = 1):
-    vReport = Report()
+def vcfAnalysis(vcfData, bamFileName, strainID = '', refName='', minQuality = 30, minCount = 1,minSize=0):
+    #vReport = Report() #Testing new report object
+    vReport = DataReport()
+    vcfDataResult = []
     
     print "Opening bam file [%s]" % (bamFileName)
     samFile = pysam.Samfile(bamFile,"rb")
@@ -568,7 +533,7 @@ def vcfAnalysis(vcfData, bamFileName, strainID = '', refName='', minQuality = 30
         ref = vcf["REF"]
         alt = vcf["ALT"]
         quality = vcf["QUAL"]
-        end = start + len(vcf)
+        end = start + len(alt)
         vcf["END"] = end
         
         alreads = samFile.fetch(irefname,start,end)
@@ -578,10 +543,12 @@ def vcfAnalysis(vcfData, bamFileName, strainID = '', refName='', minQuality = 30
         vcf["READS"] = rCount
         vcf["READFILE"] = bamFileName
         
-        if float(quality < minQuality) or rCount < minCount:
+        if float(quality < minQuality) or rCount < minCount or len(alt) < minSize:
+            #print "vcf [%s] quality [%s] count [%s] size [%s] has failed to pass" % (vcf,quality,rCount,len(alt))
             continue
+        else:
+            vcfDataResult.append (vcf)
         
-        #if verbose: print "[%s]:(%s:%s)x[%s]=[%s] : [%s] ==> [%s]" % (irefname,start,end,rCount,quality,ref,alt)
         if irefname == '':
             irefname = refname
         
@@ -595,9 +562,9 @@ def vcfAnalysis(vcfData, bamFileName, strainID = '', refName='', minQuality = 30
         vReport.add(vID,"ref",ref)
         vReport.add(vID,"alt",alt)
         vReport.add(vID,"bamFile",bamFile)
-        vReport.add(vID,"bamFile",samFile)
+        #vReport.add(vID,"samFile",samFile)
     
-    return (vcfData, vReport)
+    return (vcfDataResult, vReport)
 
 def oligoAlignmentAnalysis(oligoSeqFile,vcfFile,sampleCode):
     
@@ -605,7 +572,7 @@ def oligoAlignmentAnalysis(oligoSeqFile,vcfFile,sampleCode):
     processVCF.blastTools = bTools
     vcfAlignment = processVCF.alignVCF(oligoSeqFile,vcfFile,idTag=sampleCode)
         
-    alignmentReport = Report()
+    alignmentReport = DataReport()
     alignmentLogFileName = workFolder + "%s.log" % (sampleCode)
     logFile = open(alignmentLogFileName,"w")
         
@@ -733,6 +700,7 @@ if __name__ == '__main__':
     #Quality values, may be taken from configuration later
     minQuality = 30.00
     minCount = 5 
+    minSize = 2
     
     #Testing hard coded values
     refTag = "NC_000913_2"
@@ -748,62 +716,69 @@ if __name__ == '__main__':
     print "ISeuqence Analysis Version 1.2"
     print "Running Mode %s" % (mode)
     
-    idCode = parseSampleNameTag(readFile1, readFile2, regex='.*_([ATCG\-]+)_.*',tag="%s")
-    sampleCode = "Sample_%s" % idCode
-    if verbose: print "Using Sample Code [%s]" % (sampleCode)
-    
-    currentPath = os.getcwd()
-    pathRegex = '.*GEN([0-9].+)'
-    match = re.match(pathRegex,currentPath)
-    
-    if match == None:
-        print "No match on regular expression [%s] in  [%s]" %(pathRegex, currentPath)
-        pathCode = "000"
-    else:
-        pathCode = match.group(1)
-    if verbose: print "Path Code [%s]" % (pathCode)
-    
     analysisName = options.nameTag
     
     #File Names
     varianceRepositoryFile = workFolder + "Variant_%s_Repository.bac" % (analysisName)
-    
-    masterReportFile = workFolder + "Master_%s_Report.txt" % (analysisName)
     mReportFile = workFolder + "Master_%s_Report.bac" % (analysisName)
-    varianceReportFile = workFolder + "Variance_%s_Report.txt" % (analysisName)
-    coverageReportFile = workFolder + "Coverage_%s_Report.txt" % (analysisName)
     mVarianceLog = workFolder + "Master_%s_Var.bac" % (analysisName)
     
-    #Strain Identifier
-    strainID = "%s_%s" % (sampleCode,pathCode)  
-    
-    #Variance Tools.
-    sTools = VarianceTools()
-    sTools.verbose = True
-    sTools.refGenomeTag = refTag
-    sTools.workingDir = workFolder
-    sTools.refGenomeDir = genomeFolder
-    sTools.refGenomeTag = refTag
+    masterReportFile = workFolder + "Master_%s_Report.txt" % (analysisName)
+    varianceReportFile = workFolder + "Variance_%s_Report.txt" % (analysisName)
+    coverageReportFile = workFolder + "Coverage_%s_Report.txt" % (analysisName)
      
     #========================
     # Construct variant data
     #======================== 
         
     if os.path.exists(mReportFile) and 'rebuild' not in mode:
+        print "Loading master repository [%s]" % (mReportFile)
         mReportFh = open(mReportFile,"r")
         masterReport = pickle.load(mReportFh)
         mReportFh.close()
     else:
-        masterReport = Report()
+        print "=====>Starting new master report"
+        masterReport = DataReport()
         
     if os.path.exists(varianceRepositoryFile) and 'rebuild' not in mode:
+        print "Loading variance repository [%s]" % (varianceRepositoryFile)
         fh = open(varianceRepositoryFile,"r")
         varRepository = pickle.load(fh)
         fh.close()
     else:
         varRepository = {}    
         
-    if strainID not in varRepository.keys() or 'vcf' in mode:
+    #---------------------------------------------------------------------------
+    # Running in BUILD mode to collect data from into VCF from sequencing data
+    #---------------------------------------------------------------------------
+    if 'vcf' in mode:
+        
+        idCode = parseSampleNameTag(readFile1, readFile2, regex='.*_([ATCG\-]+)_.*',tag="%s")
+        sampleCode = "Sample_%s" % idCode
+        if verbose: print "Using Sample Code [%s]" % (sampleCode)
+        
+        currentPath = os.getcwd()
+        pathRegex = '.*GEN([0-9].+)'
+        match = re.match(pathRegex,currentPath)
+        
+        if match == None:
+            print "No match on regular expression [%s] in  [%s]" %(pathRegex, currentPath)
+            pathCode = "000"
+        else:
+            pathCode = match.group(1)
+        if verbose: print "Path Code [%s]" % (pathCode)
+        
+        #Strain Identifier
+        strainID = "%s_%s" % (sampleCode,pathCode)  
+        
+        #Variance Tools.
+        sTools = VarianceTools()
+        sTools.verbose = True
+        sTools.refGenomeTag = refTag
+        sTools.workingDir = workFolder
+        sTools.refGenomeDir = genomeFolder
+        sTools.refGenomeTag = refTag
+        
         print "Process VCF to Report for sample code [%s]" % (sampleCode)
         
         (bamFile,vcfFile) = buildVCF(workFolder, sampleCode, mode)
@@ -816,38 +791,38 @@ if __name__ == '__main__':
         
         print "Building Variant information from VCF report"
         strainID = "%s_%s" % (sampleCode,pathCode)     
-        (vcfData, vReport) = vcfAnalysis(vcfData=vcfData, bamFileName=bamFile, strainID = strainID, refName=refname, minQuality=minQuality, minCount=minCount)
+        (vcfAnalysis, vReport) = vcfAnalysis(vcfData=vcfData, bamFileName=bamFile, strainID = strainID, refName=refname, minQuality=minQuality, minCount=minCount, minSize=minSize)
+        print "Adding new entries [%s] to master report [%s]" % (len(vReport._data),len(masterReport._data))
         masterReport.extend(vReport)
         
         #Fill repository
         if strainID not in varRepository.keys():
             varRepository[strainID] = {}
-        varRepository[strainID]["vcfData"] = vcfData
+            
+        varRepository[strainID]["vcfData"] = vcfAnalysis
         varRepository[strainID]["sourceFile"] = bamFile
+        #samData = pysam.Samfile(bamFile,"rb")
+        #varRepository[strainID]["sourceData"] = samData
  
         #Update data file of reported variants
-        print "Building VCF master pickle %s" % (mReportFile)
+        print "Building Master Report pickle %s" % (mReportFile)
         mReportFh = open(mReportFile,"w")
         pickle.dump(masterReport,mReportFh)
         mReportFh.close()
         
         #Update repository of variants
-        print "Building VCF master pickle %s" % (varianceRepositoryFile)
+        print "Building VCF Repository pickle %s" % (varianceRepositoryFile)
         FH = open(varianceRepositoryFile,"w")
         pickle.dump(varRepository,FH)
         FH.close()
         
         if "report" in mode:
-            print "Building VCF Master Report"
-            writer = ReportWriter()
-            writer.setFile(masterReportFile)
-            writer.write(masterReport)
-            writer.closeFile()
+            print "Building VCF Report [%s]" % (masterReportFile)
+            reportIO = DataReportIO()
+            reportIO.writeReport(masterReport, masterReportFile, delimiter='\t')
           
     if 'join' in mode:
             
-        #Join variants that are close together
-        strainID = "%s_%s" % (sampleCode,pathCode)
         print "Joining strain variants"
         varCollection = joinStrainVariants(varRepository, joinDistance=20)
         print"Building collection report"
@@ -859,19 +834,12 @@ if __name__ == '__main__':
         pickle.dump(varCollection,varFH)
         varFH.close()
         
-        #Write flat file of vcf master report and joined variant matrix
+        #Write flat file of VCF master report and joined variant matrix
         if "report" in mode:
+            reportIO = DataReportIO()
             print "Writing Variance Regions Report [%s]" % (varianceReportFile)
-            writer = ReportWriter()
-            writer.setFile(varianceReportFile)
-            writer.write(varianceReport)
-            writer.closeFile()
-            
+            reportIO.writeReport(varianceReport, varianceReportFile, delimiter='\t')
             print "Writing Variance Coverage Report [%s]" % (coverageReportFile)
-            writer = ReportWriter()
-            writer.setFile(coverageReportFile)
-            writer.write(coverageReport)
-            writer.closeFile()
-            
-    
+            reportIO.writeReport(coverageReport, coverageReportFile, delimiter='\t')
+        
     print "Done"

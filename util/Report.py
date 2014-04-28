@@ -6,7 +6,6 @@ Report
 '''
 
 from util.Cache import SecondOrderCache
-from util.BasicWriter import BasicWriter
 
 class Report:
     """
@@ -165,26 +164,16 @@ class Report:
                 continue
             else:
                 result[rowName] = value
-        return result
+        return result     
 
-class ReportWriter(BasicWriter):
-    
-    def write(self, report):
-        headerNames = ['Row Names']
-        headerNames.extend(report.returnColumnNames())
-        self.writeLineArray(headerNames)
-        rowNames = report.returnRowNames()
-        for rowName in rowNames:
-            nameArray = [rowName]
-            nameArray.extend(report.returnRowArray(rowName))
-            self.writeLineArray(nameArray)
-        
-
-from util.FlatFileParser import FlatFileParser
-from optparse import OptionParser
-from time import time,strftime
-    
 if __name__ == '__main__':
+    
+    from util.FlatFileParser import FlatFileParser
+    from util.ReportWriter import ReportWriter
+    from optparse import OptionParser
+    from time import time
+
+    
     parser = OptionParser()
     parser.add_option("-v", "--verbose", action="store_true", dest="verbose", default=False, help="set verbose mode")
     parser.add_option("-f", "--file", dest="input_file", default=None, help="test input file")
@@ -201,7 +190,7 @@ if __name__ == '__main__':
     print "Reading report file [%s]" %(input_file)
     s_read_time = time()    
     reader = FlatFileParser()
-    report = reader.parseToReport(input_file, keyTag='', header=None, unique=True)
+    report = reader.parseGenericReport(input_file, keyTag='Row Names', header=None, unique=True)
     e_read_time = time() - s_read_time
     print "Reading time [%s]" %(e_read_time)
     
