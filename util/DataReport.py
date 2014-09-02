@@ -88,8 +88,9 @@ class DataReport:
     
 class DataReportIO:
     
-    def __init__(self,header=None):
+    def __init__(self,header=None,row_id_name="Row_Name"):
         self.header=header
+        self.row_id_name=row_id_name
     
     def _check_header(self,header):
         pass
@@ -116,8 +117,8 @@ class DataReportIO:
     def writeReport(self,report,file_name, **kwargs):
         '''kwargs are provided to csv.writer'''
         with open(file_name,'wb') as fh:
-            writer = csv.writer(fh, quoting=csv.QUOTE_MINIMAL, **kwargs)
-            header = ["row_name"] + report.getColumnNames()
+            writer = csv.writer(fh, quoting=csv.QUOTE_ALL, **kwargs)
+            header = [self.row_id_name] + report.getColumnNames()
             writer.writerow(header)
             for row_name in report.getRowNames():
                 row = [row_name] + report._data[row_name]
@@ -143,7 +144,7 @@ if __name__ == '__main__':
     
     reader = DataReportIO()
     read_start_time = time()
-    report = reader.readReport(input_file,'row_name',delimiter='\t')
+    report = reader.readReport(input_file,'Row_Name',delimiter='\t')
     read_time = time() - read_start_time
     print "read time for %s is [%s]" % (input_file,read_time)
     

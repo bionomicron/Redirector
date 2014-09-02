@@ -421,7 +421,7 @@ def joinStrainVariants(varianceData,joinDistance=50,verbose=False):
     print "Variant report complete"
     return vcfCollection
 
-def vcfCollectionReport(vcfCollection,vcf,reorder=True,useCount=True):
+def vcfCollectionReport(vcfCollection,vcf,reorder=True,useCount=True,fill_blank="NA"):
     result = DataReport()
     coverageReport = DataReport()
     data = vcfCollection.items()
@@ -430,7 +430,8 @@ def vcfCollectionReport(vcfCollection,vcf,reorder=True,useCount=True):
     strainIDs = vcfCollection.keys()
     #sort strain IDs
     
-    if reorder:
+    #if reorder:
+    if True:
         print "reordering report"
         columnNames = strainIDs
         cmap = {}
@@ -444,24 +445,23 @@ def vcfCollectionReport(vcfCollection,vcf,reorder=True,useCount=True):
             cmap[key] = cName
         strainKeys = cmap.keys()
         strainKeys.sort()
-    
-    for (strainID,vcfRegions) in vcfCollection.items():
+     
+    #for (strainID,vcfRegions) in vcfCollection.items():
+    for strainKey in strainKeys:
+        strainID = cmap[strainKey]
+        vcfRegions = vcfCollection[strainID]
+        
         print "Collecting [%s] regions" % (strainID)
         for (loc,vcfRegion) in vcfRegions.items():
-
+            
             count = vcfRegion["Count"]
             vcfData = vcfRegion['vcfData']
             item = "[%s]:" % (count)
             coverageReport.add(loc,strainID,count)
                 
-            for vcf in vcfData:
-                item = item + "(%s,%s,%s)" % (vcf["POS"],vcf["READS"],vcf["ALT"])
-            if len(vcfData) != 0:
-                result.add(loc,strainID,item)
-
             if useCount:
                 if result.get(loc,"Region_Count") == None:
-                    result.add(loc,"Region_Count",0)
+                    #result.add(loc,"Region_Count",0)
                     rCount = 0
                 else:
                     rCount = result.get(loc,"Region_Count")
@@ -469,8 +469,15 @@ def vcfCollectionReport(vcfCollection,vcf,reorder=True,useCount=True):
                     
                 if len(vcfData) != 0:
                     rCount += 1
-                    result.add(loc,"Region_Count",rCount)    
-        
+                    #result.add(loc,"Region_Count",rCount) 
+            
+            for vcf in vcfData:
+                item = item + "(%s,%s,%s)" % (vcf["POS"],vcf["READS"],vcf["ALT"])
+            if len(vcfData) != 0:
+                result.add(loc,strainID,item)
+            else:
+                result.add(loc,strainID,fill_blank)
+
     return (result,coverageReport)
         
         
