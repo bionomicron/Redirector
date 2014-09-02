@@ -1,6 +1,7 @@
 #---------------------------------------------
 # Analysis of correlation between genomic
 # and metabolic data for engineered strains
+# Updated 2014.09.01
 #---------------------------------------------
 
 #Examples/Users/bionomicron/Projects/Redirector/scripts/MetabolomicAnalysis.R
