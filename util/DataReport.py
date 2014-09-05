@@ -127,7 +127,7 @@ class DataReportIO:
     
 if __name__ == '__main__':
     from optparse import OptionParser
-    from time import time,strftime
+    from time import time
 
     parser = OptionParser()
     parser.add_option("-v", "--verbose", action="store_true", dest="verbose", default=False, help="set verbose mode")

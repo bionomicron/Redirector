@@ -1009,6 +1009,8 @@ class OptimizationControlRedirector:
         
         result = ''
         tags = re.findall(regex,value)
+        if annotationMap == None:
+            return ''
         for s in tags:
             if s in annotationMap.keys():
                 r = annotationMap[s]
@@ -1040,7 +1042,7 @@ class OptimizationControlRedirector:
         result = objective
         if annotationName in model.annotation.keys():
                 annotationMap = model.annotation[annotationName]
-                gMap = annotationMap.getColumn("gene")
+                gMap = annotationMap.getColumn("gene symbol")
                 bMap = {}
                 for (key,value) in gMap.items():
                     bMap[value] = key

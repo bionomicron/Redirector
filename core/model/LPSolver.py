@@ -36,6 +36,7 @@ class LPSolver:
         self.mpsLogFile = False
         self.ignoreBadReferences = False
         self.Mip = True
+        self.scip_path = ":" + os.environ["HOME"] + "/bin"
             
     def _parseSCIPLog(self, fileName):
         '''
@@ -267,9 +268,12 @@ class LPSolver:
         if self.configFile and self.configFile != '':
             #config = "-s " + self.configFile
             pass
+        
         command = 'scip -q -f ' + lpTempFile[1] + ' -l ' + scipTempFile[1] + " "+ config
         if self.verbose: print "wrote temp file %s" % (scipTempFile[1])
         
+        if self.scip_path not in os.environ["PATH"]:
+            os.environ["PATH"] += self.scip_path
         os.system(command)
         os.remove(lpTempFile[1])
         
