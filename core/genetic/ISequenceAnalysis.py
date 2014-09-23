@@ -1,5 +1,6 @@
 '''
 Created on Aug 11, 2013
+Updated Sep 22, 2014
 
 @author: Graham Rockwell
 @summary:
@@ -7,36 +8,45 @@ Created on Aug 11, 2013
     Particular tools for analysis of recombination strains.
 '''
 
+#Redirector utility methods and objects
 from util.Config import ReflectionConfig 
-from core.genetic.SequenceTools import BlastTools
-from util.FlatFileParser import FlatFileParser
 from util.DataReport import DataReport, DataReportIO
 
+#Bio Python Objects
 from Bio.Seq import Seq
 from Bio import Entrez,SeqIO
 from Bio.SeqRecord import SeqRecord
 
-import os,re, csv, pickle
-import subprocess
-from optparse import OptionParser
-import difflib
+#System tools
+import os, re, csv, pickle
+import subprocess, difflib
+
+#Python samtools
 import pysam
 
-class VarianceTools:
+#Command line parsing
+from optparse import OptionParser
+
+class SequenceAssemblyTools:
     '''
+    @summary:
     Tools for processing high throughput sequencing assembly and analysis.
     '''
     
     def __init__(self):
         self.verbose = False
-        
-        # Location pof this script. We may find other paths relative to this.
         self.PWD = os.path.dirname(os.path.realpath(__file__ ))
         self.workingDir = "./"
         self.refGenomeDir = "./"
         self.refGenomeTag = ""
+        self.analysis_tools_path= ""
         
-    def samProcessRead(self,r1,r2,idTag = None):
+    def samProcessRead(self,r1,r2,idTag = None, rebuild=True):
+        '''
+        @summary:
+        Takes in paired sequencing files and process them into index bam files
+        '''
+        
         difference = difflib.SequenceMatcher()
         
         if not os.path.exists(workFolder):
@@ -55,6 +65,11 @@ class VarianceTools:
         drefTag = self.refGenomeDir + self.refGenomeTag
         dIdTag = self.workingDir + idTag
         
+        #Check Path
+        print os.environ["PATH"]
+        if self.analysis_tools_path not in os.environ["PATH"]:
+            os.environ["PATH"] += self.analysis_tools_path
+        
         print "Analysis tools must be in current path [%s]" % os.path.expandvars("$PATH")
         if not os.path.exists("%s.1.bt2" % drefTag):
         #if True:
@@ -67,23 +82,33 @@ class VarianceTools:
         
         if self.verbose: print ">aligning sequences to reference"
         #try BWA script.
-        call = "bowtie2 -q -p 4 -k 3 --local %s -1 %s -2 %s -S %s.sam" % (drefTag,r1,r2,dIdTag)
-        if self.verbose: print "executing command: [%s]" % call
-        subprocess.call(call,shell=True)
+        if os.path.exists("%s.sam" % dIdTag):
+            if self.verbose: print "found %s.sam" % dIdTag
+        else: 
+            print "building %s.sam" % dIdTag
+            call = "bowtie2 -q -p 4 -k 3 --local %s -1 %s -2 %s -S %s.sam" % (drefTag,r1,r2,dIdTag)
+            if self.verbose: print "executing command: [%s]" % call
+            subprocess.call(call,shell=True)
         
-        if self.verbose: print ">creating bam file"
-        call = "samtools view -S -b -o %s.bam %s.sam" % (dIdTag,dIdTag)
-        if self.verbose: print "executing command: [%s]" % call
-        subprocess.call(call,shell=True)
+        if os.path.exists("%s.bam" % dIdTag):
+            print "found %s.bam" % dIdTag
+        else:
+            print "building %s.bam" % dIdTag
+            call = "samtools view -S -b -o %s.bam %s.sam" % (dIdTag,dIdTag)
+            if self.verbose: print "executing command: [%s]" % call
+            subprocess.call(call,shell=True)
         
-        if self.verbose: print ">sorting bam file"
-        call = "samtools sort %s.bam %s_s" % (dIdTag,dIdTag)
-        if self.verbose: print "executing command: [%s]" % call
-        subprocess.call(call,shell=True)
+        if os.path.exists("%s_s.bam" % dIdTag) and not rebuild:
+            print "found %s.bam" % dIdTag
+        else:
+            print "building %s_s.bam" % dIdTag
+            call = "samtools sort %s.bam %s_s" % (dIdTag,dIdTag)
+            if self.verbose: print "executing command: [%s]" % call
+            subprocess.call(call,shell=True)
         
         if self.verbose: print ">indexing bam file"
         call = "samtools index %s_s.bam" % (dIdTag)
-        if self.verbose: print "executing command: [%s]" % call
+        if self .verbose: print "executing command: [%s]" % call
         subprocess.call(call,shell=True)
         
         resultFile = "%s_s.bam" % (dIdTag)
@@ -91,6 +116,13 @@ class VarianceTools:
         return (idTag,dIdTag,resultFile)
     
     def vcfProcess(self,bamFile,idTag):
+        '''
+        @summary:
+        Creates variant call format (vcf) from index bam file.
+        Currently uses freebayes program, this may not be the best.
+        Currently focused on E. coli sequencing data.
+        '''
+        
         drefTag = self.refGenomeDir + self.refGenomeTag
         resultFile = self.workingDir + "%s.vcf" % idTag
         
@@ -101,151 +133,39 @@ class VarianceTools:
         
         return resultFile
     
-class ProcessVCF:
-    
-    def __init__(self):
-        self.blastTools = BlastTools()
-        self.verbose = False
+    def buildAlignment(self,workFolder,sampleCode,mode):
+        '''
+        @summary:
+        Pipeline to process paired sequencing files into index bam files and vcf (variant call format) file.
+        '''
         
-    def writeToLog(self,stringValue,logFileH,verbose=False):
-        if logFileH == None:
-            return None
-        try:
-            if verbose: print stringValue
-            logFileH.write(stringValue+"\n")
-        except:
-            print "failed to write to log file [%s]" % (logFileH)
-        return None
-
-    def replaceSeqTarget(self,seq,newSeq,loc):
-        prefix = seq[:loc]
-        post = seq[loc+len(newSeq):]
-        result = prefix + newSeq + post
-        return result
-
-    def findTargets(self,targetMap,feature,minQuality=10,logFile=None):
-        start = feature.location.start.position
-        end = feature.location.end.position
-        locations = targetMap.keys()
-        matches = filter(lambda x: start<=float(x)<=end,locations)
-        
-        querySeq = feature.qualifiers["query"]
-        subjectSeq = feature.qualifiers["subject"]
-        refSeq = Seq("_"*len(subjectSeq))
-        readSeq = Seq("_"*len(subjectSeq))
-        qualityValues = []
-        chrom = ''        
-        
-        dCount = 0    
-        for loc in matches:
-            floc = float(loc)
-            seqStart = int(floc-start)
+        bamFile = workFolder + "%s_s.bam" % (sampleCode)
+        vcfFile = workFolder + "%s.vcf" % (sampleCode)
             
-            target = targetMap[loc]
-            chrom = target["CHROM"]
-            ref = target["REF"]
-            alts = target["ALT"].split(",")
-            quality = target["QUAL"]
-            qualityValues.append((seqStart,quality))
+        if not os.path.exists(bamFile) or "rebuild2" in mode:
+            print "Building bam file %s" % (bamFile)
+            (id,dID,bamFile) = self.samProcessRead(readFile1,readFile2,idTag=sampleCode)
+        else:
+            print "%s found" % (bamFile)
+                            
+        if not os.path.exists(vcfFile) or "rebuild2" in mode:
+        #if True:
+            print "Building vcf file %s" % (vcfFile)    
+            vcfFile = sTools.vcfProcess(bamFile, idTag = sampleCode)
+        else:
+            print "%s found" % (vcfFile)
             
-            if float(quality) < minQuality:
-                print "(failed) Feature [%s] (%s <-> %s) ===> %s" % (feature.id,start,end,qualityValues)
-            else:
-                dCount += 1
-            
-            refSeq = self.replaceSeqTarget(refSeq,ref,seqStart)
-            for alt in alts:
-                readSeq = self.replaceSeqTarget(readSeq,alt,seqStart)
-        
-        result = {}
-        
-        result["name"] = feature.id
-        result["chrom"] = chrom
-        result["start"] = start
-        result["end"] = end
-        result["quality"] = qualityValues 
-        result["query"] = querySeq
-        result["subject"] = subjectSeq
-        result["refSeq"] = refSeq
-        result["alt-read"] = readSeq
-        
-        return result
+        return(bamFile,vcfFile)
 
-    def annotateAlignment(self,targetMap,featuresArray,idTag):
-        readLogName = "read_log_%s.txt" % (idTag)
-        logFP = open(readLogName,"w")
-        result = {}
-        
-        for features in featuresArray:
-            for feature in features:
-                id = feature.id
-                targets = self.findTargets(targetMap, feature, minQuality= 10, logFile = logFP)
-                result[id] = targets
-        return result
-
-    def alignVCF(self,targetFile,vcfFile,idTag):
-        readRecord = parseVCFFile(vcfFile)
-    
-        targetRecords= SeqIO.parse(open(targetFile), "fasta")
-        targetRecords = list(targetRecords)
-    
-        print "Processing [%s] records" % (len(targetRecords))
-        
-        if verbose: print "blasting sequences"
-        
-        self.blastTools.verbose = verbose
-        blastedFeatures = self.blastTools.seqBlastToFeatures(blastDB, blastExe, targetFile, blastType = "blastn",scoreMin = 1e-5)
-        
-        if verbose: print "finished blasting locations"
-        alignmentReport = self.annotateAlignment(readRecord, blastedFeatures,idTag)
-        
-        return alignmentReport
-
-def parseSampleNameTag(name1,name2,regex='.*_([ATCG\-]+)_.*',tag="Sample_%s"):
-    difference = difflib.SequenceMatcher()
-    
-    difference.set_seqs(name1, name2)
-    match = difference.get_matching_blocks()
-    if len(match) != 0:
-        m = match[0]
-        idTag = name1[m[0]:m[0]+m[2]]
-    if idTag == '':
-        idTag = name1
-    
-    match = re.match(regex,idTag)
-    if match == None:
-        print "No match on regex [%s] in  [%s]" %(regex, idTag)
-        return idTag
-    
-    rtag = match.group(1)
-    result = tag % rtag
-    return result
-
-def parseRecombinationOligoFile(filename):
-    header = ["Row Names", "original", "hits", "genomic_start", "genomic_end", "genomic_strand", "sequencing location"]
-    fp = open (filename,'rb')
-    reader = csv.DictReader(filter(lambda row: row[0]!='#', fp),delimiter="\t",fieldnames=header)
-    result = {}
-    for l in reader:
-        key = l["Row Names"]
-        result[key] = l
-    return result
-
-def parseRecOligoFile(filename):
-    parser = FlatFileParser(delimiter='\t', comment='##', emptyField='NA')
-    header={"Row Names":"Row Names", "original":"original", "hits":"hits", "genomic_start":"genomic_start", "genomic_end":"genomic_end", "genomic_strand":"genomic_strand","sequencing location":"sequencing location"}
-    keyTag = "Row Names"
-    record = parser.parseToReport(filename, keyTag, header, unique=True)
-    return record
-
-def parseVCF(filename):
-    '''
+def parseVCF(filename, comment_tag="##", delimiter="\t"):
+    '''  
     @var filename: name of vcf file
     @filename: String
     @result:[{vcf}]
+    
     @summary:
-    parse VCF file to list of dictionaries
-    split alt sequences into separate entries
+    Parse VCF file to list of dictionary objects
+    Split alternative sequences into separate entries
     '''
     
     header = ["#CHROM","POS","ID","REF","ALT","QUAL","FILTER","INFO","FORMAT","unknown"]
@@ -267,7 +187,10 @@ def parseVCF(filename):
         
     return result
 
-def parseVCFFile(filename):
+def parseVcfToMap(filename):
+    '''
+    @result{position:[{vcf}]
+    '''
     reader = parseVCF(filename)
     result = {}
     for d in reader:
@@ -276,255 +199,276 @@ def parseVCFFile(filename):
     
     return result
 
-def getVariantRegions(vcfData,strainID,verbose=False):
-    regions = []
+class VariantRegionAnalysis:
+    '''
+    Set of methods for finding regions of variants in a set of samples.
+    Then combining variants for each sample in those regions.
+    Useful for finding areas of high recombination / mutation activity.
+    Also used for preparing matrix of variance regions for machine learning.
+    '''
     
-    for vcf in vcfData:
-        vcf["Strain"] = strainID
-        vcf["ID"] = (strainID,vcf["POS"],vcf["ALT"])
-        
-        start = float(vcf["POS"])
-        end = start + len(vcf["REF"])
-        fstart = start
-        fend = end
-        
-        if verbose: print "[%s] (%s,%s)" % (vcf["Strain"],start,end)
-        regions.append((fstart,fend))
-        
-    return regions
+    def __init__(self):
+        pass
 
-def filterRegions(regions,start,end,joinDistance):
-        f = lambda x: (start-joinDistance) <= x <= (end + joinDistance)
+    def getVariantRegions(self,vcfData,strainID,verbose=False):
+        '''
+        @summary:
+        Collect region (start, end) sequence data from list of variants.
+        '''
+        regions = []
+        
+        for vcf in vcfData:
+            vcf["Strain"] = strainID
+            vcf["ID"] = (strainID,vcf["POS"],vcf["ALT"])
+            
+            start = float(vcf["POS"])
+            end = start + len(vcf["REF"])
+            fstart = start
+            fend = end
+            
+            if verbose: print "[%s] (%s,%s)" % (vcf["Strain"],start,end)
+            regions.append((fstart,fend))
+            
+        return regions
+
+    def _filterRegions(self,regions,start,end,join_distance):
+        '''
+        @summary:
+        return list of regions with the join distance from the given start and end locations
+        '''
+        f = lambda x: (start-join_distance) <= x <= (end + join_distance)
         g = lambda x: f(x[0]) or f(x[1])
         matches = filter(g,regions)
         return matches
 
-def joinVariantRegions(regions,joinDistance=50,verbose=False):
-    regions.sort()
-    
-    for region in regions:
-        fstart = region[0]
-        fend = region[1]
+    def joinVariantRegions(self,regions,join_distance=50,verbose=False):
+        '''
+        @return: [regions]
+        @summary:
+        Combine regions with in join_distance
+        '''
+        regions.sort()
         
-        matches = filterRegions(regions,fstart,fend,joinDistance)
-        
-        if len(matches) == 1: continue
-        
-        #if verbose: print "region matches [%s]" % (len(matches))
-        
-        while len(matches) > 0:
-            locations = []
-            for loc in matches:
-                locations.extend(loc)
-                regions.remove(loc)
-            fstart = min(locations)
-            fend = max(locations)
-            matches = filterRegions(regions,fstart,fend,joinDistance)
+        for region in regions:
+            fstart = region[0]
+            fend = region[1]
             
-        iLoc = (fstart,fend)
-        regions.append(iLoc)
-        
-        #if verbose: print "final region (%s,%s)" % (fstart,fend)
-        
-    return regions
-
-def findVariantRegions(vcfData,regions=[],strainID='',joinDistance=50,verbose=False):
-    '''
-    Build list of regions in which variants are found.
-    Used to build a set of Genome comparable regions.
-    Build regions by join close by locations of variants
-    '''
-    for vcf in vcfData:
-        vcf["Strain"] = strainID
-        vcf["ID"] = (strainID,vcf["POS"],vcf["ALT"])
-        
-        start = float(vcf["POS"])
-        end = start + len(vcf["REF"])
-        fstart = start
-        fend = end
-        
-        if verbose: print "[%s] (%s,%s)" % (vcf["Strain"],start,end)
-        f = lambda x: (fstart-joinDistance) <= x <= (fend + joinDistance)
-        g = lambda x: f(x[0]) or f(x[1])
-        matches = filter(g,regions)
-        
-        while len(matches) > 0:
-            for loc in matches:
-                (istart,iend) = loc
-                if istart < fstart: fstart = istart
-                if iend > fend: fend = iend
-                regions.remove(loc)
-            matches = filter(g,regions)
-        iLoc = (fstart,fend)
-        regions.append(iLoc)  
-        
-    return regions              
-        
-def joinVariants(vcfData,regions,samData,verbose=False):
-    '''
-    Take selected regions of genome
-    Group variants in selected regions
-    Return region grouped variants.
-    '''
-    irefname = samData.getrname(0)
-    vcfRegions = {}
-    
-    
-    for region in regions:
-        start = region[0]
-        end = region[1]
-    
-        alreads = samData.fetch(irefname,start,end)
-        alreads = list(alreads)
-        rCount = len(alreads)
-    
-        f = lambda x: (float(start) <= float(x["POS"]) <= float(end))
-        
-        matches = filter(f,vcfData)
-        l = len(matches)
-        if l > 1:
-            #print "[%s],(%s)" % (l,matches)
-            pass
-        vcfRegion = {"Count":rCount}
-        vcfRegion["vcfData"] = matches
+            matches = self._filterRegions(regions,fstart,fend,join_distance)
             
-        vcfRegions[region] = vcfRegion
-        
-    return vcfRegions
-        
-def joinStrainVariants(varianceData,joinDistance=50,verbose=False):
-    '''
-    Merge near by variants into variant regions for better analysis
-    '''
-    print "joining variants"
-    
-    strainIDs = varianceData.keys()
-    vcfCollection = {}
-    regions = []
-    
-    for strainID in strainIDs:
-        vcfData = varianceData[strainID]["vcfData"] 
-        #regions = findVariantRegions(vcfData, regions, strainID, joinDistance, verbose)
-        iregions = getVariantRegions(vcfData, strainID, verbose)
-        regions.extend(iregions)
-        
-    regions = joinVariantRegions(regions, joinDistance, verbose=True)
-        
-    for strainID in strainIDs:
-        print "Joining variants for [%s]" % (strainID)
-        vcfData = varianceData[strainID]["vcfData"]
-        bamFile = varianceData[strainID]["sourceFile"]
-        samData = pysam.Samfile(bamFile,"rb")
-        vcfRegions = joinVariants(vcfData,regions,samData)
-        vcfCollection[strainID] = vcfRegions
-        
-    print "Variant report complete"
-    return vcfCollection
-
-def vcfCollectionReport(vcfCollection,vcf,reorder=True,useCount=True,fill_blank="NA"):
-    result = DataReport()
-    coverageReport = DataReport()
-    data = vcfCollection.items()
-    data.sort()
-    
-    strainIDs = vcfCollection.keys()
-    #sort strain IDs
-    
-    #if reorder:
-    if True:
-        print "reordering report"
-        columnNames = strainIDs
-        cmap = {}
-        regex = ".*_([0-9]+).*"
-        for cName in columnNames:
-            match = re.match(regex,cName)
-            if match != None:
-                key = match.group(1)
-            else:
-                key = cName
-            cmap[key] = cName
-        strainKeys = cmap.keys()
-        strainKeys.sort()
-     
-    #for (strainID,vcfRegions) in vcfCollection.items():
-    for strainKey in strainKeys:
-        strainID = cmap[strainKey]
-        vcfRegions = vcfCollection[strainID]
-        
-        print "Collecting [%s] regions" % (strainID)
-        for (loc,vcfRegion) in vcfRegions.items():
+            if len(matches) == 1: continue
             
-            count = vcfRegion["Count"]
-            vcfData = vcfRegion['vcfData']
-            item = "[%s]:" % (count)
-            coverageReport.add(loc,strainID,count)
+            #if verbose: print "region matches [%s]" % (len(matches))
+            
+            while len(matches) > 0:
+                locations = []
+                for loc in matches:
+                    locations.extend(loc)
+                    regions.remove(loc)
+                fstart = min(locations)
+                fend = max(locations)
+                matches = self._filterRegions(regions,fstart,fend,join_distance)
                 
-            if useCount:
-                if result.get(loc,"Region_Count") == None:
-                    #result.add(loc,"Region_Count",0)
-                    rCount = 0
+            iLoc = (fstart,fend)
+            regions.append(iLoc)
+            
+            #if verbose: print "final region (%s,%s)" % (fstart,fend)
+            
+        return regions
+
+    def findVariantRegions(self,vcfData,regions=[],strainID='',joinDistance=50,verbose=False):
+        '''
+        @summary:
+        Build list of regions in which variants are found.
+        Used to build a set of Genome comparable regions.
+        Build regions by join close by locations of variants
+        '''
+        for vcf in vcfData:
+            vcf["Strain"] = strainID
+            vcf["ID"] = (strainID,vcf["POS"],vcf["ALT"])
+            
+            start = float(vcf["POS"])
+            end = start + len(vcf["REF"])
+            fstart = start
+            fend = end
+            
+            if verbose: print "[%s] (%s,%s)" % (vcf["Strain"],start,end)
+            f = lambda x: (fstart-joinDistance) <= x <= (fend + joinDistance)
+            g = lambda x: f(x[0]) or f(x[1])
+            matches = filter(g,regions)
+            
+            while len(matches) > 0:
+                for loc in matches:
+                    (istart,iend) = loc
+                    if istart < fstart: fstart = istart
+                    if iend > fend: fend = iend
+                    regions.remove(loc)
+                matches = filter(g,regions)
+            iLoc = (fstart,fend)
+            regions.append(iLoc)  
+            
+        return regions              
+            
+    def joinVariants(self,vcfData,regions,samData,verbose=False):
+        '''
+        @summary:
+        Take selected regions of a selected Genome.
+        Groups variants in selected regions
+        Return region grouped variants.
+        '''
+        irefname = samData.getrname(0)
+        vcfRegions = {}
+        
+        
+        for region in regions:
+            start = region[0]
+            end = region[1]
+        
+            alreads = samData.fetch(irefname,start,end)
+            alreads = list(alreads)
+            rCount = len(alreads)
+        
+            f = lambda x: (float(start) <= float(x["POS"]) <= float(end))
+            
+            matches = filter(f,vcfData)
+            l = len(matches)
+            if l > 1:
+                #print "[%s],(%s)" % (l,matches)
+                pass
+            vcfRegion = {"Count":rCount}
+            vcfRegion["vcfData"] = matches
+                
+            vcfRegions[region] = vcfRegion
+            
+        return vcfRegions
+            
+    def joinStrainVariants(self,varianceData,joinDistance=50,verbose=False):
+        '''
+        @return: {[strain_id]:{region:[variants]}}
+        @summary:
+        Merge near by variants into variant regions for better analysis
+        '''
+        
+        strainIDs = varianceData.keys()
+        vcfCollection = {}
+        regions = []
+        
+        if verbose: print "Populating variance region list with initial variants"
+        for strainID in strainIDs:
+            vcfData = varianceData[strainID]["vcfData"] 
+            #regions = findVariantRegions(vcfData, regions, strainID, joinDistance, verbose)
+            iregions = self.getVariantRegions(vcfData, strainID, verbose)
+            regions.extend(iregions)
+        
+        if verbose: print "Joining variants in selected variance regions with in %s"  % (joinDistance)    
+        regions = self.joinVariantRegions(regions, joinDistance, verbose=True)
+        
+        if verbose: print "Using regions to join sets of close variants into report"
+        for strainID in strainIDs:
+            print "Joining variants for [%s]" % (strainID)
+            vcfData = varianceData[strainID]["vcfData"]
+            bamFile = varianceData[strainID]["sourceFile"]
+            samData = pysam.Samfile(bamFile,"rb")
+            vcfRegions = self.joinVariants(vcfData,regions,samData)
+            vcfCollection[strainID] = vcfRegions
+            
+        print "Variant report complete"
+        return vcfCollection
+    
+    def vcfCollectionReport(self,vcfCollection,vcf,reorder=True,useCount=True,fill_blank="NA"):
+        '''
+        @summary:
+        Build report object form variant calls groups by regions into "variance collection".
+        Report is made to be easily written to delimited matrix / spread sheet format.
+        '''
+        result = DataReport()
+        coverageReport = DataReport()
+        data = vcfCollection.items()
+        data.sort()
+        
+        strainIDs = vcfCollection.keys()
+        #sort strain IDs
+        
+        #if reorder:
+        if True:
+            print "reordering report"
+            columnNames = strainIDs
+            cmap = {}
+            regex = ".*_([0-9]+).*"
+            for cName in columnNames:
+                match = re.match(regex,cName)
+                if match != None:
+                    key = match.group(1)
                 else:
-                    rCount = result.get(loc,"Region_Count")
-                    rCount = float(rCount)
+                    key = cName
+                cmap[key] = cName
+            strainKeys = cmap.keys()
+            strainKeys.sort()
+         
+        #for (strainID,vcfRegions) in vcfCollection.items():
+        for strainKey in strainKeys:
+            strainID = cmap[strainKey]
+            vcfRegions = vcfCollection[strainID]
+            
+            print "Collecting [%s] regions" % (strainID)
+            for (loc,vcfRegion) in vcfRegions.items():
+                
+                count = vcfRegion["Count"]
+                vcfData = vcfRegion['vcfData']
+                item = "[%s]:" % (count)
+                coverageReport.add(loc,strainID,count)
                     
-                if len(vcfData) != 0:
-                    rCount += 1
-                    #result.add(loc,"Region_Count",rCount) 
-            
-            for vcf in vcfData:
-                item = item + "(%s,%s,%s)" % (vcf["POS"],vcf["READS"],vcf["ALT"])
-            if len(vcfData) != 0:
-                result.add(loc,strainID,item)
-            else:
-                result.add(loc,strainID,fill_blank)
-
-    return (result,coverageReport)
-        
-        
-def filterReadFile(fileName,output,headerRegx,dataRegx):
-    f = open(fileName,"r")
-    o = open(output,"w")
-    header = ''
-    for line in f:
-        hMatch = re.match(line,headerRegx)
-        dMatch = re.match(dataRegx)
-        if header != '' & dMatch:
-            o.write(header)
-            o.write(line)
-            header=''
-        elif hMatch:
-            header = line
-        else:
-            header = ''
-    
-    f.close()
-    o.close()
-            
-    return True
-
-def buildVCF(workFolder,sampleCode,mode):
-    #bamFileName = "%s_s.bam" % (sampleCode)
-    #vcfFileName = "%s.vcf" % (sampleCode)
-    
-    bamFile = workFolder + "%s_s.bam" % (sampleCode)
-    vcfFile = workFolder + "%s.vcf" % (sampleCode)
-        
-    if not os.path.exists(bamFile) or "rebuild2" in mode:
-        print "Building bam file %s" % (bamFile)
-        (id,dID,bamFile) = sTools.samProcessRead(readFile1,readFile2,idTag=sampleCode)
-    else:
-        print "%s found" % (bamFile)
+                if useCount:
+                    if result.get(loc,"Region_Count") == None:
+                        #result.add(loc,"Region_Count",0)
+                        rCount = 0
+                    else:
+                        rCount = result.get(loc,"Region_Count")
+                        rCount = float(rCount)
                         
-    if not os.path.exists(vcfFile) or "rebuild2" in mode:
-    #if True:
-        print "Building vcf file %s" % (vcfFile)    
-        vcfFile = sTools.vcfProcess(bamFile, idTag = sampleCode)
-    else:
-        print "%s found" % (vcfFile)
-        
-    return(bamFile,vcfFile)
+                    if len(vcfData) != 0:
+                        rCount += 1
+                        #result.add(loc,"Region_Count",rCount) 
+                
+                for vcf in vcfData:
+                    item = item + "(%s,%s,%s):" % (vcf["POS"],vcf["READS"],vcf["ALT"])
+                if len(vcfData) != 0:
+                    result.add(loc,strainID,item)
+                else:
+                    result.add(loc,strainID,fill_blank)
+    
+        return (result,coverageReport)
 
-def vcfAnalysis(vcfData, bamFileName, strainID = '', refName='', minQuality = 30, minCount = 1,minSize=0):
+def parseSampleNameTag(name1,name2,regex='.*_([ATCG\-]+)_.*',tag="Sample_%s"):
+    '''
+    @summary:
+    Process sample file names to find important identificaiton codes
+    '''
+    difference = difflib.SequenceMatcher()
+    
+    difference.set_seqs(name1, name2)
+    match = difference.get_matching_blocks()
+    if len(match) != 0:
+        m = match[0]
+        idTag = name1[m[0]:m[0]+m[2]]
+    if idTag == '':
+        idTag = name1
+    
+    match = re.match(regex,idTag)
+    if match == None:
+        print "No match on regex [%s] in  [%s]" %(regex, idTag)
+        return idTag
+    
+    rtag = match.group(1)
+    result = tag % rtag
+    return result
+               
+def processVariantData(vcfData, bamFileName, strainID = '', refName='', minQuality = 30, minCount = 1,minSize=0):
+    '''
+    @return [vcf]
+    @summary:
+    Process variant data link combine with related sequencing reference.
+    Also creates a report of all variant data.
+    '''
     #vReport = Report() #Testing new report object
     vReport = DataReport()
     vcfDataResult = []
@@ -572,51 +516,6 @@ def vcfAnalysis(vcfData, bamFileName, strainID = '', refName='', minQuality = 30
         #vReport.add(vID,"samFile",samFile)
     
     return (vcfDataResult, vReport)
-
-def oligoAlignmentAnalysis(oligoSeqFile,vcfFile,sampleCode):
-    
-    processVCF = ProcessVCF()
-    processVCF.blastTools = bTools
-    vcfAlignment = processVCF.alignVCF(oligoSeqFile,vcfFile,idTag=sampleCode)
-        
-    alignmentReport = DataReport()
-    alignmentLogFileName = workFolder + "%s.log" % (sampleCode)
-    logFile = open(alignmentLogFileName,"w")
-        
-    for (targetKey,alignment) in vcfAlignment.items():
-        if verbose: print "alignment [%s]" % (targetKey)
-            
-        name = alignment["name"]
-        irefname = alignment["chrom"]
-        quality = alignment["quality"]
-        start = alignment["start"]
-        end = alignment["end"]
-        subject = alignment["subject"]
-        query = alignment["query"]
-        refSeq = "%s" % alignment["refSeq"]
-        altRead = "%s" % alignment["alt-read"]
-            
-        if verbose: print "[%s]:%s:%s" % (irefname,start,end)
-        if irefname == '':
-            irefname = refname
-            
-        readList = []
-        alreads = samFile.fetch(irefname,start,end)
-        alreads = list(alreads)
-        alreadCount = len(alreads)
-        
-        if len(altRead.replace("_","")) != 0:
-            rTag = "%s_count[%s]_quality[%s]" % (targetKey,alreadCount,quality)
-            print rTag
-            logFile.write(">%s\n" % rTag)
-            logFile.write(subject+"[subject]\n") 
-            logFile.write(query+"[query]\n")
-            logFile.write(refSeq+"[refSeq]\n")
-            logFile.write(altRead+"[alt-read]\n")   
-        
-    logFile.close()
-    
-    return (alignmentReport,readList)
     
 
 if __name__ == '__main__':
@@ -711,14 +610,7 @@ if __name__ == '__main__':
     
     #Testing hard coded values
     refTag = "NC_000913_2"
-    #oligoReport = "20120709_FattyAcid_sequencing_colonies_primers.csv"
-    #oligoSeqFile = "20120709_FA_recombination_oligos_v2.fasta"  #! Make this something taken from the configuration file
-    #oligoSeqFile = options.workFolder + oligoSeqFile    
-    
-    bTools = BlastTools()
-    bTools.verbose = verbose
-    bTools.blastDB = blastDB
-    bTools.blastExe = blastExe
+
     
     print "ISeuqence Analysis Version 1.2"
     print "Running Mode %s" % (mode)
@@ -755,10 +647,12 @@ if __name__ == '__main__':
     else:
         varRepository = {}    
         
-    #---------------------------------------------------------------------------
-    # Running in BUILD mode to collect data from into VCF from sequencing data
-    #---------------------------------------------------------------------------
-    if 'vcf' in mode:
+    '''
+    Running in 'build' mode processes sequencing data into 
+    index bam files and vcf files.
+    
+    '''
+    if 'build' in mode:
         
         idCode = parseSampleNameTag(readFile1, readFile2, regex='.*_([ATCG\-]+)_.*',tag="%s")
         sampleCode = "Sample_%s" % idCode
@@ -776,10 +670,10 @@ if __name__ == '__main__':
         if verbose: print "Path Code [%s]" % (pathCode)
         
         #Strain Identifier
-        strainID = "%s_%s" % (sampleCode,pathCode)  
+        #strainID = "%s_%s" % (sampleCode,pathCode)  
         
         #Variance Tools.
-        sTools = VarianceTools()
+        sTools = SequenceAssemblyTools()
         sTools.verbose = True
         sTools.refGenomeTag = refTag
         sTools.workingDir = workFolder
@@ -788,17 +682,20 @@ if __name__ == '__main__':
         
         print "Process VCF to Report for sample code [%s]" % (sampleCode)
         
-        (bamFile,vcfFile) = buildVCF(workFolder, sampleCode, mode)
+        (bam_file,vcf_file) = sTools.buildAlignment(workFolder, sampleCode, mode)
         
-        print "Opening bam file [%s]" % (bamFile)
-        samFile = pysam.Samfile(bamFile,"rb")
+        print "Opening bam file [%s]" % (bam_file)
+        samFile = pysam.Samfile(bam_file,"rb")
         refname = samFile.getrname(0)
             
-        vcfData = parseVCF(vcfFile)
+        vcf_data = parseVCF(vcf_file)
         
+        #----------------------------------------------------
+        # Build data record object for variant information
+        #----------------------------------------------------
         print "Building Variant information from VCF report"
         strainID = "%s_%s" % (sampleCode,pathCode)     
-        (vcfAnalysis, vReport) = vcfAnalysis(vcfData=vcfData, bamFileName=bamFile, strainID = strainID, refName=refname, minQuality=minQuality, minCount=minCount, minSize=minSize)
+        (vcf_data_post, vReport) = processVariantData(vcfData=vcf_data, bamFileName=bam_file, strainID = strainID, refName=refname, minQuality=minQuality, minCount=minCount, minSize=minSize)
         print "Adding new entries [%s] to master report [%s]" % (len(vReport._data),len(masterReport._data))
         masterReport.extend(vReport)
         
@@ -806,11 +703,9 @@ if __name__ == '__main__':
         if strainID not in varRepository.keys():
             varRepository[strainID] = {}
             
-        varRepository[strainID]["vcfData"] = vcfAnalysis
-        varRepository[strainID]["sourceFile"] = bamFile
-        #samData = pysam.Samfile(bamFile,"rb")
-        #varRepository[strainID]["sourceData"] = samData
- 
+        varRepository[strainID]["vcfData"] = vcf_data_post
+        varRepository[strainID]["sourceFile"] = bam_file
+
         #Update data file of reported variants
         print "Building Master Report pickle %s" % (mReportFile)
         mReportFh = open(mReportFile,"w")
@@ -828,12 +723,17 @@ if __name__ == '__main__':
             reportIO = DataReportIO()
             reportIO.writeReport(masterReport, masterReportFile, delimiter='\t')
           
+    '''
+    join mode combines variants by regions into matrix of strains and regions.
+    '''
     if 'join' in mode:
+        
+        region_analysis = VariantRegionAnalysis()
             
         print "Joining strain variants"
-        varCollection = joinStrainVariants(varRepository, joinDistance=20)
+        varCollection = region_analysis.joinStrainVariants(varRepository, joinDistance=20)
         print"Building collection report"
-        (varianceReport, coverageReport) = vcfCollectionReport(varCollection,varRepository)
+        (varianceReport, coverageReport) = region_analysis.vcfCollectionReport(varCollection,varRepository)
             
         #Update data file of joined variants
         print "Building Variance Collection %s" % (mVarianceLog)

@@ -188,8 +188,6 @@ class BlastTools:
         
         return targetCount
 
-
-
 class SequenceTools:
     '''
     Group of tools for finding sequence properties and generally useful information
@@ -487,7 +485,6 @@ class FeatureTools:
                 print str(i) + "weirdo"
                 print featureList[i]
                 
-    
 class SequenceFactory:
     '''
     Factory 
@@ -615,7 +612,6 @@ class SequenceFactory:
                     feature.qualifiers[newName] = [value]
             result.append(feature)
         return result  
-        
         
 class ControlRegionTools:
     '''
@@ -787,8 +783,7 @@ class ControlRegionTools:
                 result.add(name,colName,tag)
             
         return result
-    
-        
+            
 class RecombinationOligoFactory:
     '''
     Factory for generating oligos for recombination

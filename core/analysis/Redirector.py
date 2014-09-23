@@ -122,7 +122,7 @@ def main_function():
     searchSize                  = config.get("Redirector","searchNeighborhood")
     searchIter                  = config.get("Redirector","iterations")
     objectiveMinPercent         = float(config.get("Redirector","bioTarget"))
-    usePrimeBounds              = config.get("Redirector","primeBounds")
+    usePrimeBounds              = config.get("Redirector","primeBounds") == "True"
    
     #----------------------------------------------------
     # Initialize and set values for tools and factories
@@ -170,7 +170,8 @@ def main_function():
     naturalFluxBounds = None
     if usePrimeBounds:
         
-        print "finding natural flux bounds"
+        print "finding natural flux bounds [%s]" % (usePrimeBounds)
+        #return False
         naturalFluxBounds = LinearModelVariableBoundarys(modelMatrix, objectiveName=objectiveName, targets=boundaryTargets, pickleFileName = fluxBoundariesFile, minObjectivePercent=objectiveMinPercent,searchSize=boundarySearchSize)
         print "finding production flux bounds"
         #syntheticFluxBounds = LinearModelVariableBoundarys(modelMatrix, objectiveName=syntheticObjectiveName, targets=boundaryTargets, pickleFileName = fluxBoundariesFile, minObjectivePercent=objectiveMinPercent,searchSize=boundarySearchSize)
