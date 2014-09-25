@@ -514,7 +514,8 @@ class SequenceFactory:
         
         if not os.path.isfile(filename):
             if self.verbose: print "Downloading..."
-            net_handle = Entrez.efetch(db="nucleotide", rettype="genebank", id=genbankID)
+            Entrez.email = self.email
+            net_handle = Entrez.efetch(db="nucleotide", rettype="genebank", id=genbankID, )
             out_handle = open(filename, "w")
             out_handle.write(net_handle.read())
             out_handle.close()
@@ -546,7 +547,6 @@ class SequenceFactory:
             time.sleep(5)
         genbankSequence = self.parseGenBank(genbankFile)
         return genbankSequence
-    
 
     def printFeature(self,feature):
         '''

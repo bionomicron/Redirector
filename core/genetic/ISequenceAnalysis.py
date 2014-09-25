@@ -8,16 +8,19 @@ Updated Sep 22, 2014
     Particular tools for analysis of recombination strains.
 '''
 
-#Redirector utility methods and objects
+#Redirector methods and objects
 from util.Config import ReflectionConfig 
 from util.DataReport import DataReport, DataReportIO
+from core.genetic.SequenceTools import SequenceFactory
 
 #Bio Python Objects
 from Bio.Seq import Seq
 from Bio import Entrez,SeqIO
 from Bio.SeqRecord import SeqRecord
+from Bio import pairwise2
+from Bio.SubsMat import MatrixInfo as matlist
 
-#System tools
+#System objects and methods
 import os, re, csv, pickle
 import subprocess, difflib
 
@@ -39,6 +42,7 @@ class SequenceAssemblyTools:
         self.workingDir = "./"
         self.refGenomeDir = "./"
         self.refGenomeTag = ""
+        self.reg_genome = self.refGenomeDir + self.refGenomeTag
         self.analysis_tools_path= ""
         
     def samProcessRead(self,r1,r2,idTag = None, rebuild=True):
@@ -62,7 +66,7 @@ class SequenceAssemblyTools:
             if idTag == '':
                 idTag = r1
             
-        drefTag = self.refGenomeDir + self.refGenomeTag
+        reference_tag = self.refGenomeDir + self.refGenomeTag
         dIdTag = self.workingDir + idTag
         
         #Check Path
@@ -71,49 +75,58 @@ class SequenceAssemblyTools:
             os.environ["PATH"] += self.analysis_tools_path
         
         print "Analysis tools must be in current path [%s]" % os.path.expandvars("$PATH")
-        if not os.path.exists("%s.1.bt2" % drefTag):
+        if not os.path.exists("%s.1.bt2" % reference_tag):
         #if True:
             print "building reference index"
-            call = "bowtie2-build %s %s > bowtie2_ref_index_log.txt" % (drefTag,drefTag)
-            if self.verbose: print "executing command: [%s]" % call
+            call = "bowtie2-build %s %s > bowtie2_ref_index_log.txt" % (reference_tag,reference_tag)
+            if self.verbose: print ">%s" % call
             subprocess.call(call,shell=True)
         else:
-            if self.verbose: print "building reference index found %s" % (drefTag)
+            if self.verbose: print "building reference index found %s" % (reference_tag)
         
         if self.verbose: print ">aligning sequences to reference"
         #try BWA script.
-        if os.path.exists("%s.sam" % dIdTag):
+        if os.path.exists("%s.sam" % dIdTag) and not rebuild:
             if self.verbose: print "found %s.sam" % dIdTag
         else: 
             print "building %s.sam" % dIdTag
-            call = "bowtie2 -q -p 4 -k 3 --local %s -1 %s -2 %s -S %s.sam" % (drefTag,r1,r2,dIdTag)
-            if self.verbose: print "executing command: [%s]" % call
+            call = "bowtie2 -q -p 4 -k 3 --local %s -1 %s -2 %s -S %s.sam" % (reference_tag,r1,r2,dIdTag)
+            if self.verbose: print ">%s" % call
             subprocess.call(call,shell=True)
         
-        if os.path.exists("%s.bam" % dIdTag):
+        if os.path.exists("%s.bam" % dIdTag) and not rebuild:
             print "found %s.bam" % dIdTag
         else:
-            print "building %s.bam" % dIdTag
+            print "Building %s.bam" % dIdTag
             call = "samtools view -S -b -o %s.bam %s.sam" % (dIdTag,dIdTag)
-            if self.verbose: print "executing command: [%s]" % call
+            if self.verbose: print ">%s" % call
             subprocess.call(call,shell=True)
         
         if os.path.exists("%s_s.bam" % dIdTag) and not rebuild:
             print "found %s.bam" % dIdTag
         else:
-            print "building %s_s.bam" % dIdTag
+            print "Building %s_s.bam" % dIdTag
             call = "samtools sort %s.bam %s_s" % (dIdTag,dIdTag)
-            if self.verbose: print "executing command: [%s]" % call
+            if self.verbose: print ">%s" % call
             subprocess.call(call,shell=True)
         
-        if self.verbose: print ">indexing bam file"
-        call = "samtools index %s_s.bam" % (dIdTag)
-        if self .verbose: print "executing command: [%s]" % call
-        subprocess.call(call,shell=True)
+            if self.verbose: print "Indexing bam file"
+            call = "samtools index %s_s.bam" % (dIdTag)
+            if self.verbose: print ">%s" % call
+            subprocess.call(call,shell=True)
         
-        resultFile = "%s_s.bam" % (dIdTag)
+        if os.path.exists("%s.fq" % dIdTag) and not rebuild:
+            print "found %s.fq" % dIdTag
+        else:
+            if self.verbose: print "building fasta sequence"
+            call = "samtools mpileup -uf %s %s_s.bam | bcftools view -cg - | vcfutils.pl vcf2fq > %s.fq" % (reference_tag,dIdTag,dIdTag)
+            if self.verbose: print ">%s" % call
+            subprocess.call(call,shell=True)
+            
+        bam_file = "%s_s.bam" % (dIdTag)
+        fasta_file = "%s.fq" % (dIdTag)
         
-        return (idTag,dIdTag,resultFile)
+        return (idTag,dIdTag,bam_file,fasta_file)
     
     def vcfProcess(self,bamFile,idTag):
         '''
@@ -123,11 +136,11 @@ class SequenceAssemblyTools:
         Currently focused on E. coli sequencing data.
         '''
         
-        drefTag = self.refGenomeDir + self.refGenomeTag
+        reference_tag = self.refGenomeDir + self.refGenomeTag
         resultFile = self.workingDir + "%s.vcf" % idTag
         
         if self.verbose: print "processing vcf file"
-        call = "freebayes --fasta-reference %s %s -v %s" % (drefTag,bamFile,resultFile)
+        call = "freebayes --fasta-reference %s %s -v %s" % (reference_tag,bamFile,resultFile)
         if self.verbose: print "executing command: [%s]" % call
         subprocess.call(call,shell=True)
         
@@ -139,23 +152,24 @@ class SequenceAssemblyTools:
         Pipeline to process paired sequencing files into index bam files and vcf (variant call format) file.
         '''
         
-        bamFile = workFolder + "%s_s.bam" % (sampleCode)
-        vcfFile = workFolder + "%s.vcf" % (sampleCode)
+        bam_file = workFolder + "%s_s.bam" % (sampleCode)
+        vcf_file = workFolder + "%s.vcf" % (sampleCode)
+        fasta_file = workFolder + "%s.fq" % (sampleCode)
             
-        if not os.path.exists(bamFile) or "rebuild2" in mode:
-            print "Building bam file %s" % (bamFile)
-            (id,dID,bamFile) = self.samProcessRead(readFile1,readFile2,idTag=sampleCode)
+        if not os.path.exists(bam_file) or "rebuild2" in mode:
+            print "Building bam file %s" % (bam_file)
+            (id,dID,bam_file,fasta_file) = self.samProcessRead(readFile1,readFile2,idTag=sampleCode)
         else:
-            print "%s found" % (bamFile)
+            print "%s found" % (bam_file)
                             
-        if not os.path.exists(vcfFile) or "rebuild2" in mode:
+        if not os.path.exists(vcf_file) or "rebuild2" in mode:
         #if True:
-            print "Building vcf file %s" % (vcfFile)    
-            vcfFile = sTools.vcfProcess(bamFile, idTag = sampleCode)
+            print "Building vcf file %s" % (vcf_file)    
+            vcf_file = sTools.vcfProcess(bam_file, idTag = sampleCode)
         else:
-            print "%s found" % (vcfFile)
+            print "%s found" % (vcf_file)
             
-        return(bamFile,vcfFile)
+        return(bam_file,vcf_file,fasta_file)
 
 def parseVCF(filename, comment_tag="##", delimiter="\t"):
     '''  
@@ -179,6 +193,8 @@ def parseVCF(filename, comment_tag="##", delimiter="\t"):
         d["CHROM"] = d["#CHROM"]
         del d["#CHROM"]
         d["QUAL"] = float(d["QUAL"])
+        d["START"] = start = float(d["POS"])
+        d["END"] = start + len(d["REF"])
         
         alt = d["ALT"].split(",")
         for a in alt:
@@ -462,7 +478,7 @@ def parseSampleNameTag(name1,name2,regex='.*_([ATCG\-]+)_.*',tag="Sample_%s"):
     result = tag % rtag
     return result
                
-def processVariantData(vcfData, bamFileName, strainID = '', refName='', minQuality = 30, minCount = 1,minSize=0):
+def processVariantData(vcf_data, bam_file, strainID = '', refName='', minQuality = 30, minCount = 1,minSize=0):
     '''
     @return [vcf]
     @summary:
@@ -473,18 +489,18 @@ def processVariantData(vcfData, bamFileName, strainID = '', refName='', minQuali
     vReport = DataReport()
     vcfDataResult = []
     
-    print "Opening bam file [%s]" % (bamFileName)
-    samFile = pysam.Samfile(bamFile,"rb")
+    print "Opening bam file [%s]" % (bam_file)
+    samFile = pysam.Samfile(bam_file,"rb")
     refname = samFile.getrname(0)
     
-    for vcf in vcfData:
+    for vcf in vcf_data:
         vcf["STRAIN"] = strainID
         irefname = vcf["CHROM"]
         start = int(vcf["POS"])
         ref = vcf["REF"]
         alt = vcf["ALT"]
         quality = vcf["QUAL"]
-        end = start + len(alt)
+        end = start + len(ref)
         vcf["END"] = end
         
         alreads = samFile.fetch(irefname,start,end)
@@ -492,7 +508,7 @@ def processVariantData(vcfData, bamFileName, strainID = '', refName='', minQuali
         rCount = len(alreads)
         
         vcf["READS"] = rCount
-        vcf["READFILE"] = bamFileName
+        vcf["READFILE"] = bam_file
         
         if float(quality < minQuality) or rCount < minCount or len(alt) < minSize:
             #print "vcf [%s] quality [%s] count [%s] size [%s] has failed to pass" % (vcf,quality,rCount,len(alt))
@@ -512,10 +528,44 @@ def processVariantData(vcfData, bamFileName, strainID = '', refName='', minQuali
         vReport.add(vID,"qual",quality)
         vReport.add(vID,"ref",ref)
         vReport.add(vID,"alt",alt)
-        vReport.add(vID,"bamFile",bamFile)
+        vReport.add(vID,"bamFile",bam_file)
         #vReport.add(vID,"samFile",samFile)
     
     return (vcfDataResult, vReport)
+    
+def variantComparison(ref_seq,variant1,variant2):
+    r1 = variant1["REF"]
+    a1 = variant1["ALT"]
+    s1 = int(variant1["POS"])-1
+    e1 = s1 + len(r1)
+    
+    r2 = variant2["REF"]
+    a2 = variant2["ALT"]
+    s2 = int(variant2["POS"])-1
+    e2 = s2 + len(r2)
+    
+    s = min(s1,s2)
+    e = max(e1,e2)
+    
+    seq1 = ref_seq[s:s1] + a1 + ref_seq[e1:e]
+    seq2 = ref_seq[s:s2] + a2 + ref_seq[e2:e]
+    
+    print "[%s] vs [%s]" % (seq1,seq2)
+    
+
+    matrix = matlist.blosum62
+    gap_open = -10
+    gap_extend = -0.5
+    alns = pairwise2.align.globalds(seq1, seq2, matrix, gap_open, gap_extend)
+    #score = alns[3]
+    max_score = 0
+    for align in alns:
+        score = align[2]
+        if score >= max_score:
+            max_score = score
+    print max_score
+    
+    return max_score
     
 
 if __name__ == '__main__':
@@ -636,7 +686,7 @@ if __name__ == '__main__':
         masterReport = pickle.load(mReportFh)
         mReportFh.close()
     else:
-        print "=====>Starting new master report"
+        print "==> Starting new master report [%s]" % (mReportFile)
         masterReport = DataReport()
         
     if os.path.exists(varianceRepositoryFile) and 'rebuild' not in mode:
@@ -645,12 +695,12 @@ if __name__ == '__main__':
         varRepository = pickle.load(fh)
         fh.close()
     else:
+        print "==> Staring new variant repository"
         varRepository = {}    
         
     '''
     Running in 'build' mode processes sequencing data into 
     index bam files and vcf files.
-    
     '''
     if 'build' in mode:
         
@@ -675,14 +725,20 @@ if __name__ == '__main__':
         #Variance Tools.
         sTools = SequenceAssemblyTools()
         sTools.verbose = True
-        sTools.refGenomeTag = refTag
         sTools.workingDir = workFolder
         sTools.refGenomeDir = genomeFolder
         sTools.refGenomeTag = refTag
         
         print "Process VCF to Report for sample code [%s]" % (sampleCode)
         
-        (bam_file,vcf_file) = sTools.buildAlignment(workFolder, sampleCode, mode)
+        (bam_file,vcf_file,fasta_file) = sTools.buildAlignment(workFolder, sampleCode, mode)
+        
+    
+    '''
+    Process sam and variant calls into unified repository file for processing.
+    Consider changing mode to "process"
+    '''
+    if "build" in mode:
         
         print "Opening bam file [%s]" % (bam_file)
         samFile = pysam.Samfile(bam_file,"rb")
@@ -695,16 +751,14 @@ if __name__ == '__main__':
         #----------------------------------------------------
         print "Building Variant information from VCF report"
         strainID = "%s_%s" % (sampleCode,pathCode)     
-        (vcf_data_post, vReport) = processVariantData(vcfData=vcf_data, bamFileName=bam_file, strainID = strainID, refName=refname, minQuality=minQuality, minCount=minCount, minSize=minSize)
-        print "Adding new entries [%s] to master report [%s]" % (len(vReport._data),len(masterReport._data))
-        masterReport.extend(vReport)
+        (vcf_data_post, vReport) = processVariantData(vcf_data=vcf_data, bam_file=bam_file, strainID = strainID, refName=refname, minQuality=minQuality, minCount=minCount, minSize=minSize)
         
-        #Fill repository
-        if strainID not in varRepository.keys():
-            varRepository[strainID] = {}
-            
+        print "Adding new entries [%s] to master report [%s]" % (len(vReport._data),len(masterReport._data))
+        masterReport.extend(vReport)        
+        if strainID not in varRepository.keys(): varRepository[strainID] = {}
         varRepository[strainID]["vcfData"] = vcf_data_post
         varRepository[strainID]["sourceFile"] = bam_file
+        varRepository[strainID]["seq_file"] = fasta_file
 
         #Update data file of reported variants
         print "Building Master Report pickle %s" % (mReportFile)
@@ -724,7 +778,7 @@ if __name__ == '__main__':
             reportIO.writeReport(masterReport, masterReportFile, delimiter='\t')
           
     '''
-    join mode combines variants by regions into matrix of strains and regions.
+    Running in "join mode combines variants by regions into matrix of strains and regions.
     '''
     if 'join' in mode:
         
@@ -748,5 +802,52 @@ if __name__ == '__main__':
             reportIO.writeReport(varianceReport, varianceReportFile, delimiter='\t')
             print "Writing Variance Coverage Report [%s]" % (coverageReportFile)
             reportIO.writeReport(coverageReport, coverageReportFile, delimiter='\t')
+            
+    '''
+    Mode for constructing difference matrix and clustering
+    !update to only do a pop / or once through of sequence ids.
+    '''    
+    if 'difference' in mode:
+        seqFac = SequenceFactory()
+        #config.reflect(configName, seqFac)
+        #seqFac.verbose = verbose
+        #gRecord = seqFac.getGenBankSequence(genbankID=None, filename=None)
+        #seqData = str(gRecord.seq).lower()
+        reference_genome = genomeFolder + refTag
+        reference_record = SeqIO.parse(open(reference_genome), "fasta")
+        reference_record = list(reference_record)[0]
         
+        result = {}
+        
+        
+        strain_ids = varRepository.keys()
+        strain_ids.sort()
+        for strain_id_1 in strain_ids:
+            strain_ids.remove(strain_id_1)
+            vcf_data_1 = varRepository[strain_id_1]["vcfData"]
+            
+            for strain_id_2 in strain_ids:
+                vcf_data_2 = varRepository[strain_id_2]["vcfData"]
+                total_score = 0
+                    
+                for var in vcf_data_1:         
+                    strain_id_check = var["STRAIN"]
+                    ref = var["REF"]
+                    alt = var["ALT"]
+                    quality = var["QUAL"]
+                    start = int(var["POS"])-1
+                    end = start + len(var["REF"])
+          
+                    ref_seq = str(reference_record.seq[start:end])
+                    print "Var1 (%s,%s): genome [%s] ref[%s] => alt[%s]" % (start,end,ref_seq,ref,alt)
+                    
+                    var_match = filter(lambda var: start <= int(var["POS"]) <= end or start <= (int(var["POS"]) + len(var["REF"])) <= end, vcf_data_2)
+                    
+                    for var_target in var_match:
+                        print "Var2 (%s,%s): genome [%s] ref[%s] => alt[%s]" % (int(var_target["POS"])-1,int(var_target["POS"])+len(var_target["REF"])-1,ref_seq,var_target["REF"],var_target["ALT"])
+                        score = variantComparison(ref_seq, var, var_target)
+                        total_score += score
+                print "(%s,%s) = %s" % (strain_id_1,strain_id_2,total_score)
+                result[(strain_id_1,strain_id_2)] = total_score
+                
     print "Done"
